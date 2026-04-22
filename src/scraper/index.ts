@@ -1,0 +1,307 @@
+import { getEnabledBanks, BankAdapter, ScrapedAccount, ScrapedTransaction, StatementRequest } from '../banks';
+import { db, schema } from '../db';
+import { eq, and, desc } from 'drizzle-orm';
+import { logger } from '../logger';
+import crypto from 'crypto';
+
+export interface SyncResult {
+  bank: string;
+  success: boolean;
+  accounts: ScrapedAccount[];
+  error?: string;
+  syncedAt: string;
+}
+
+export async function syncAllBanks(banks?: BankAdapter[]): Promise<SyncResult[]> {
+  const list = banks ?? getEnabledBanks();
+  if (list.length === 0) {
+    logger.warn('No banks configured — check your environment variables');
+    return [];
+  }
+
+  const results: SyncResult[] = [];
+  for (const bank of list) {
+    const result = await syncBankBalances(bank);
+    results.push(result);
+  }
+  return results;
+}
+
+export async function syncBankBalances(bank: BankAdapter): Promise<SyncResult> {
+  const startedAt = new Date().toISOString();
+  logger.info(`Starting balance sync`, { bank: bank.id });
+
+  let logId: number | undefined;
+
+  try {
+    const [log] = await db
+      .insert(schema.syncLog)
+      .values({ bank: bank.id, status: 'running', startedAt })
+      .returning({ id: schema.syncLog.id });
+    logId = log.id;
+
+    const loggedIn = await bank.isLoggedIn();
+    if (!loggedIn) {
+      logger.info('Session expired or not started — logging in', { bank: bank.id });
+      await bank.login();
+    }
+
+    const accounts = await bank.scrapeAccounts();
+
+    if (accounts.length === 0) {
+      throw new Error('No accounts found after scraping');
+    }
+
+    await persistAccounts(bank.id, accounts);
+
+    const finishedAt = new Date().toISOString();
+    await db
+      .update(schema.syncLog)
+      .set({ status: 'success', accountsFound: accounts.length, finishedAt })
+      .where(eq(schema.syncLog.id, logId));
+
+    logger.info('Balance sync completed', { bank: bank.id, count: accounts.length });
+    return { bank: bank.id, success: true, accounts, syncedAt: finishedAt };
+  } catch (err) {
+    const message = (err as Error).message;
+    logger.error('Balance sync failed', { bank: bank.id, error: message });
+
+    if (logId) {
+      await db
+        .update(schema.syncLog)
+        .set({ status: 'error', message, finishedAt: new Date().toISOString() })
+        .where(eq(schema.syncLog.id, logId))
+        .catch(() => null);
+    }
+
+    return { bank: bank.id, success: false, accounts: [], error: message, syncedAt: startedAt };
+  }
+}
+
+// ── Statement sync ────────────────────────────────────────────────────────────
+
+export interface StatementSyncResult {
+  bank: string;
+  accountNumber: string;
+  success: boolean;
+  imported: number;
+  skipped: number;
+  error?: string;
+}
+
+/**
+ * Sync statements for all accounts listed in ALFABANK_STATEMENT_ACCOUNTS /
+ * PRIORBANK_STATEMENT_ACCOUNTS env vars.
+ *
+ * When dateFrom/dateTo are not specified (scheduled sync):
+ *   - dateFrom = last transaction date in DB for that account (or 7 days ago if no history)
+ *   - dateTo   = today
+ *
+ * Explicit dates always override the automatic range.
+ */
+export async function syncAllStatements(
+  dateFrom?: string,
+  dateTo?: string,
+  banks?: BankAdapter[],
+): Promise<StatementSyncResult[]> {
+  const today = isoToday();
+  const list = banks ?? getEnabledBanks();
+  const results: StatementSyncResult[] = [];
+
+  for (const bank of list) {
+    if (!bank.scrapeStatement) continue;
+
+    const accountNumbers = getStatementAccounts(bank.id);
+    if (accountNumbers.length === 0) {
+      logger.debug('No statement accounts configured', { bank: bank.id });
+      continue;
+    }
+
+    for (const accountNumber of accountNumbers) {
+      const from = dateFrom ?? await resolveFromDate(bank.id, accountNumber);
+      const to   = dateTo   ?? today;
+      logger.info('Statement date range resolved', { bank: bank.id, accountNumber, from, to });
+      const result = await syncBankStatement(bank, { accountNumber, dateFrom: from, dateTo: to });
+      results.push(result);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Sync statement for a single account. Ensures the bank session is active.
+ */
+export async function syncBankStatement(
+  bank: BankAdapter,
+  req: StatementRequest,
+): Promise<StatementSyncResult> {
+  logger.info('Starting statement sync', { bank: bank.id, account: req.accountNumber, from: req.dateFrom, to: req.dateTo });
+
+  try {
+    if (!bank.scrapeStatement) {
+      throw new Error(`Bank ${bank.id} does not support statement scraping`);
+    }
+
+    const loggedIn = await bank.isLoggedIn();
+    if (!loggedIn) {
+      logger.info('Session expired or not started — logging in', { bank: bank.id });
+      await bank.login();
+    }
+
+    const transactions = await bank.scrapeStatement(req);
+    logger.info('Statement scraped', { bank: bank.id, account: req.accountNumber, count: transactions.length });
+
+    const { imported, skipped } = await persistTransactions(bank.id, req.accountNumber, transactions);
+    logger.info('Statement persisted', { bank: bank.id, account: req.accountNumber, imported, skipped });
+
+    return { bank: bank.id, accountNumber: req.accountNumber, success: true, imported, skipped };
+  } catch (err) {
+    const message = (err as Error).message;
+    logger.error('Statement sync failed', { bank: bank.id, account: req.accountNumber, error: message });
+    return { bank: bank.id, accountNumber: req.accountNumber, success: false, imported: 0, skipped: 0, error: message };
+  }
+}
+
+async function persistTransactions(
+  bankId: string,
+  accountNumber: string,
+  scraped: ScrapedTransaction[],
+): Promise<{ imported: number; skipped: number }> {
+  let imported = 0;
+  let skipped = 0;
+
+  for (const tx of scraped) {
+    const txKey = computeTxKey(tx);
+
+    const existing = await db.query.transactions.findFirst({
+      where: and(
+        eq(schema.transactions.bank, bankId),
+        eq(schema.transactions.accountNumber, accountNumber),
+        eq(schema.transactions.transactionDate, tx.transactionDate),
+        eq(schema.transactions.txKey, txKey),
+      ),
+    });
+
+    if (existing) {
+      skipped++;
+      continue;
+    }
+
+    await db.insert(schema.transactions).values({
+      bank: bankId,
+      accountNumber,
+      transactionDate: tx.transactionDate,
+      reference: tx.reference ?? null,
+      description: tx.description,
+      debit: tx.debit ?? null,
+      credit: tx.credit ?? null,
+      currency: tx.currency,
+      counterpartyUnp: tx.counterpartyUnp ?? null,
+      txKey,
+    });
+    imported++;
+  }
+
+  return { imported, skipped };
+}
+
+/**
+ * Compute a stable deduplication key for a transaction.
+ * Uses reference when available; falls back to a hash of (description, debit, credit).
+ */
+function computeTxKey(tx: ScrapedTransaction): string {
+  if (tx.reference) return tx.reference;
+  const raw = [tx.description, tx.debit ?? '', tx.credit ?? ''].join('|');
+  return crypto.createHash('md5').update(raw).digest('hex').slice(0, 16);
+}
+
+/**
+ * Parse ALFABANK_STATEMENT_ACCOUNTS or PRIORBANK_STATEMENT_ACCOUNTS env var
+ * into an array of account numbers.
+ */
+function getStatementAccounts(bankId: string): string[] {
+  const key = `${bankId.toUpperCase()}_STATEMENT_ACCOUNTS`;
+  const raw = process.env[key] ?? '';
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function isoToday(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Determine the start date for a statement sync when no explicit date is given.
+ * Uses the most recent transaction date already in the DB for this account.
+ * Falls back to 7 days ago if no transactions exist yet.
+ */
+async function resolveFromDate(bankId: string, accountNumber: string): Promise<string> {
+  const last = await db.query.transactions.findFirst({
+    where: and(
+      eq(schema.transactions.bank, bankId),
+      eq(schema.transactions.accountNumber, accountNumber),
+    ),
+    orderBy: [desc(schema.transactions.transactionDate)],
+    columns: { transactionDate: true },
+  });
+
+  if (last) {
+    logger.debug('resolveFromDate: last transaction found', {
+      bank: bankId, accountNumber, lastDate: last.transactionDate,
+    });
+    return last.transactionDate;
+  }
+
+  // No history — load last 7 days
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fallback = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  logger.debug('resolveFromDate: no history, falling back', { bank: bankId, accountNumber, fallback });
+  return fallback;
+}
+
+// ── Account persistence ───────────────────────────────────────────────────────
+
+async function persistAccounts(bankId: string, scraped: ScrapedAccount[]): Promise<void> {
+  const now = new Date().toISOString();
+
+  for (const item of scraped) {
+    const existing = await db.query.accounts.findFirst({
+      where: and(
+        eq(schema.accounts.bank, bankId),
+        eq(schema.accounts.accountNumber, item.accountNumber),
+      ),
+    });
+
+    if (existing) {
+      await db
+        .update(schema.accounts)
+        .set({
+          currency: item.currency,
+          name: item.name || existing.name,
+          balance: item.balance,
+          available: item.available,
+          balanceUpdatedAt: now,
+        })
+        .where(eq(schema.accounts.id, existing.id));
+    } else {
+      await db.insert(schema.accounts).values({
+        bank: bankId,
+        accountNumber: item.accountNumber,
+        currency: item.currency,
+        name: item.name,
+        balance: item.balance,
+        available: item.available,
+        balanceUpdatedAt: now,
+      });
+      logger.info('New account registered', {
+        bank: bankId,
+        accountNumber: item.accountNumber,
+        currency: item.currency,
+      });
+    }
+  }
+}

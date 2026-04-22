@@ -1,0 +1,28 @@
+services:
+  account-balances:
+    build: .
+    container_name: account-balances
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data          # Persist SQLite DB and logs
+    environment:
+      # Alfa-Bank Belarus (leave empty to disable)
+      - ALFABANK_LOGIN=${ALFABANK_LOGIN:-}
+      - ALFABANK_PASSWORD=${ALFABANK_PASSWORD:-}
+      # Priorbank Belarus (leave empty to disable)
+      - PRIORBANK_LOGIN=${PRIORBANK_LOGIN:-}
+      - PRIORBANK_PASSWORD=${PRIORBANK_PASSWORD:-}
+      - DB_PATH=/app/data/accounts.db
+      - API_PORT=3000
+      - API_KEY=${API_KEY}
+      - SCHEDULE_START_HOUR=${SCHEDULE_START_HOUR:-9}
+      - SCHEDULE_END_HOUR=${SCHEDULE_END_HOUR:-17}
+      - SCHEDULE_INTERVAL_MINUTES=${SCHEDULE_INTERVAL_MINUTES:-5}
+      - HEADLESS=true
+      - BROWSER_TIMEOUT_MS=30000
+      - DEBUG_SCREENSHOTS=${DEBUG_SCREENSHOTS:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    # Chromium requires shared memory
+    shm_size: '512mb'

@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `counterparty_unp` text;
