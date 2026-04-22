@@ -62,6 +62,10 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `SCHEDULE_INTERVAL_MINUTES` | `5` | Interval between scrapes (minutes) |
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
 | `PRIORBANK_STATEMENT_ACCOUNTS` | — | Same for Priorbank |
+| `ONEC_WEBHOOK_URL` | — | 1C webhook URL to notify on new transactions (leave empty to disable) |
+| `ONEC_USERNAME` | — | Basic auth username for 1C |
+| `ONEC_PASSWORD` | — | Basic auth password for 1C |
+| `ONEC_API_KEY` | — | Value sent in the `X-Api-Key` header to 1C |
 | `HEADLESS` | `true` | Run Chromium headless (`false` for local debug) |
 | `BROWSER_TIMEOUT_MS` | `30000` | Playwright navigation timeout (ms) |
 | `DEBUG_SCREENSHOTS` | `false` | Save screenshots/HTML to `./data/debug/` per bank |
@@ -110,17 +114,20 @@ All endpoints (except `/health`) require authentication via one of:
 
 ```
 Scheduler (node-cron)
-  └─► scraper/index.ts (syncAllBanks)
+  └─► scraper/index.ts (syncAllBanks / syncAllStatements)
         └─► for each enabled bank:
-              ├─► banks/<bank>/auth.ts   — Playwright login
-              └─► banks/<bank>/accounts.ts — Scrape balances (API intercept → DOM fallback)
-                    └─► db/index.ts  — Persist to SQLite (keyed by bank + accountNumber)
-                          └─► GET /api/accounts — Served to 1C
+              ├─► banks/<bank>/auth.ts      — Playwright login
+              ├─► banks/<bank>/accounts.ts  — Scrape balances (API intercept → DOM fallback)
+              │     └─► db/index.ts         — Persist to SQLite (keyed by bank + accountNumber)
+              │           └─► GET /api/accounts — Served to 1C
+              └─► banks/<bank>/statements.ts — Scrape transactions (API intercept → DOM fallback)
+                    └─► db/index.ts          — Persist to SQLite (transactions table)
+                          └─► notify/onec.ts — POST to 1C webhook on new imports
 ```
 
 The scraper first attempts to intercept XHR/fetch responses matching the bank's internal API patterns. If that yields nothing, it falls back to DOM scraping with multiple CSS selector strategies.
 
-Statement scraping works the same way and stores transactions in the `transactions` table.
+Statement scraping works the same way and stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
 
 ## Development
 
@@ -145,6 +152,24 @@ If a bank's scraper fails to find account cards via DOM scraping:
 3. Update CSS selectors in `domScrape()` inside the relevant `src/banks/<bank>/accounts.ts`
 
 For statement scraping failures, the debug files are named `<bank>-statement-<account>.html/.png`.
+
+## 1C notifications
+
+When `ONEC_WEBHOOK_URL` is set, the service sends a `POST` request to that URL after each statement sync that imports at least one new transaction.
+
+**Request headers:**
+```
+Authorization: Basic <base64(ONEC_USERNAME:ONEC_PASSWORD)>
+X-Api-Key: <ONEC_API_KEY>
+Content-Type: application/json
+```
+
+**Request body:**
+```json
+{ "bank": "alfabank", "account": "BY12ALFA..." }
+```
+
+Notification failures are logged as warnings and do not interrupt the sync.
 
 ## Adding a new bank
 

@@ -3,6 +3,7 @@ import { db, schema } from '../db';
 import { eq, and, desc } from 'drizzle-orm';
 import { logger } from '../logger';
 import crypto from 'crypto';
+import { notifyStatementChanged } from '../notify/onec';
 
 export interface SyncResult {
   bank: string;
@@ -154,6 +155,10 @@ export async function syncBankStatement(
 
     const { imported, skipped } = await persistTransactions(bank.id, req.accountNumber, transactions);
     logger.info('Statement persisted', { bank: bank.id, account: req.accountNumber, imported, skipped });
+
+    if (imported > 0) {
+      await notifyStatementChanged(bank.id, req.accountNumber);
+    }
 
     return { bank: bank.id, accountNumber: req.accountNumber, success: true, imported, skipped };
   } catch (err) {
