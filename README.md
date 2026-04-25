@@ -35,8 +35,8 @@ npm run dev
 ### Docker
 
 ```bash
-cp .env.example .env
-# Edit .env
+cp stack.env.example stack.env
+# Edit stack.env — set credentials and API_KEY
 
 docker compose up --build -d
 docker compose logs -f
@@ -69,6 +69,7 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `ONEC_API_KEY` | — | Value sent in the `X-Api-Key` header to 1C |
 | `HEADLESS` | `true` | Run Chromium headless (`false` for local debug) |
 | `BROWSER_TIMEOUT_MS` | `30000` | Playwright navigation timeout (ms) |
+| `CHROMIUM_EXECUTABLE_PATH` | — | Path to a native Chromium binary (e.g. `/usr/bin/chromium-browser` on ARM64 hosts where the bundled x86_64 binary won't run) |
 | `DEBUG_SCREENSHOTS` | `false` | Save screenshots/HTML to `./data/debug/` per bank |
 | `LOG_LEVEL` | `info` | Winston log level |
 

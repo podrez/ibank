@@ -1,29 +1,56 @@
 services:
   account-balances:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: account-balances
     restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./data:/app/data          # Persist SQLite DB and logs
+
+    # Environment variables
+    env_file:
+      - stack.env
+
+    # Overrides that must always be set inside the container
     environment:
-      # Alfa-Bank Belarus (leave empty to disable)
-      - ALFABANK_LOGIN=${ALFABANK_LOGIN:-}
-      - ALFABANK_PASSWORD=${ALFABANK_PASSWORD:-}
-      # Priorbank Belarus (leave empty to disable)
-      - PRIORBANK_LOGIN=${PRIORBANK_LOGIN:-}
-      - PRIORBANK_PASSWORD=${PRIORBANK_PASSWORD:-}
       - DB_PATH=/app/data/accounts.db
       - API_PORT=3000
-      - API_KEY=${API_KEY}
-      - SCHEDULE_START_HOUR=${SCHEDULE_START_HOUR:-9}
-      - SCHEDULE_END_HOUR=${SCHEDULE_END_HOUR:-17}
-      - SCHEDULE_INTERVAL_MINUTES=${SCHEDULE_INTERVAL_MINUTES:-5}
-      - EXTRA_WORKING_DAYS=${EXTRA_WORKING_DAYS:-}
       - HEADLESS=true
-      - BROWSER_TIMEOUT_MS=30000
-      - DEBUG_SCREENSHOTS=${DEBUG_SCREENSHOTS:-false}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+
     # Chromium requires shared memory
     shm_size: '512mb'
+
+    # Volume for persistent database and debug files
+    volumes:
+      - account-balances-data:/app/data
+
+    # Run migrations then start the app
+    command: sh -c "npm run db:migrate && node dist/index.js"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      - account-balances-network
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  account-balances-data:
+    driver: local
+
+networks:
+  account-balances-network:
+    driver: bridge
