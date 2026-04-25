@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { syncAllBanks, syncBankBalances, syncAllStatements } from '../scraper';
 import { getEnabledBanks, BankAdapter } from '../banks';
 import { logger } from '../logger';
@@ -7,7 +7,7 @@ const START_HOUR = parseInt(process.env.SCHEDULE_START_HOUR ?? '9');
 const END_HOUR = parseInt(process.env.SCHEDULE_END_HOUR ?? '17');
 const INTERVAL = parseInt(process.env.SCHEDULE_INTERVAL_MINUTES ?? '5');
 
-let syncTask: cron.ScheduledTask | null = null;
+let syncTask: ScheduledTask | null = null;
 let isSyncing = false;
 
 /**
