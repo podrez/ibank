@@ -60,6 +60,7 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `SCHEDULE_START_HOUR` | `9` | Scraping window start hour (Minsk time) |
 | `SCHEDULE_END_HOUR` | `17` | Scraping window end hour (Minsk time) |
 | `SCHEDULE_INTERVAL_MINUTES` | `5` | Interval between scrapes (minutes) |
+| `EXTRA_WORKING_DAYS` | — | Comma-separated dates (`YYYY-MM-DD`) that are working days despite falling on Sat/Sun (e.g. `2026-04-25,2026-11-07`) |
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
 | `PRIORBANK_STATEMENT_ACCOUNTS` | — | Same for Priorbank |
 | `ONEC_WEBHOOK_URL` | — | 1C webhook URL to notify on new transactions (leave empty to disable) |
