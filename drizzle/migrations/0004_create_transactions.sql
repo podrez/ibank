@@ -1,4 +1,4 @@
-CREATE TABLE `transactions` (
+CREATE TABLE IF NOT EXISTS `transactions` (
   `id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
   `bank` text NOT NULL,
   `account_number` text NOT NULL,
@@ -14,4 +14,4 @@ CREATE TABLE `transactions` (
   `imported_at` text NOT NULL DEFAULT (datetime('now'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `transactions_uniq` ON `transactions` (`bank`, `account_number`, `transaction_date`, `tx_key`);
+CREATE UNIQUE INDEX IF NOT EXISTS `transactions_uniq` ON `transactions` (`bank`, `account_number`, `transaction_date`, `tx_key`);
