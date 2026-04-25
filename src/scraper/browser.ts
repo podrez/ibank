@@ -3,14 +3,26 @@ import { logger } from '../logger';
 
 let browser: Browser | null = null;
 const contexts = new Map<string, BrowserContext>();
+let launchPromise: Promise<Browser> | null = null;
 
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT_MS ?? '30000');
 const HEADLESS = process.env.HEADLESS !== 'false';
 
 async function ensureBrowser(): Promise<Browser> {
-  if (!browser || !browser.isConnected()) {
+  if (browser?.isConnected()) return browser;
+
+  // Serialize concurrent launch attempts — return the in-flight promise if one exists
+  if (launchPromise) return launchPromise;
+
+  launchPromise = (async () => {
+    // Clear stale contexts tied to the dead browser before relaunching
+    for (const [, ctx] of contexts) {
+      await ctx.close().catch(() => null);
+    }
+    contexts.clear();
+
     logger.info('Launching Chromium browser');
-    browser = await chromium.launch({
+    const b = await chromium.launch({
       headless: HEADLESS,
       args: [
         '--no-sandbox',
@@ -19,8 +31,13 @@ async function ensureBrowser(): Promise<Browser> {
         '--disable-blink-features=AutomationControlled',
       ],
     });
-  }
-  return browser;
+    browser = b;
+    return b;
+  })().finally(() => {
+    launchPromise = null;
+  });
+
+  return launchPromise;
 }
 
 export async function getBrowserContext(bankId: string): Promise<BrowserContext> {
