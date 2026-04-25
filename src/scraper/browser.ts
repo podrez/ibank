@@ -21,9 +21,12 @@ async function ensureBrowser(): Promise<Browser> {
     }
     contexts.clear();
 
+    const executablePath = process.env.CHROMIUM_EXECUTABLE_PATH || undefined;
+    if (executablePath) logger.info(`Using custom Chromium executable: ${executablePath}`);
     logger.info('Launching Chromium browser');
     const b = await chromium.launch({
       headless: HEADLESS,
+      executablePath,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
