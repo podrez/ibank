@@ -17,6 +17,9 @@ export class PriorbankAdapter implements BankAdapter {
   }
 
   async login(): Promise<void> {
+    if (this.activePage && !this.activePage.isClosed()) {
+      await this.activePage.close().catch(() => null);
+    }
     this.activePage = await login();
   }
 
