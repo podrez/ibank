@@ -52,6 +52,8 @@ A built-in dashboard is served at `http://localhost:3000/`.
 - **Account cards** — show bank name, account number, currency, current balance, and the time the balance was last scraped.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
+- **Visibility toggle** — the "Настроить" button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
+- **Statement viewer** — accounts listed in `ALFABANK_STATEMENT_ACCOUNTS` / `PRIORBANK_STATEMENT_ACCOUNTS` show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
@@ -103,6 +105,7 @@ All endpoints (except `/health`) require authentication via one of:
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
+| GET | `/api/statement-accounts` | List of accounts configured for statement syncing (from env vars) |
 | GET | `/health` | Health check (no auth required) |
 
 ### Example: GET /api/accounts
