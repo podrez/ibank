@@ -466,6 +466,15 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
     'inn', 'Inn',
   ]) || undefined;
 
+  const counterpartyName = str(a, [
+    'correspondentName', 'CorrespondentName',
+    'counterpartyName', 'CounterpartyName',
+    'beneficiaryName', 'BeneficiaryName',
+    'payerName', 'PayerName',
+    'counterparty', 'Counterparty',
+    'contractor', 'Contractor',
+  ]) || undefined;
+
   const amount = num(a, ['amount', 'Amount', 'sum', 'Sum']);
   const debitRaw  = numOrNull(a, ['debit', 'Debit', 'debitAmount', 'DebitAmount', 'expense', 'Expense']);
   const creditRaw = numOrNull(a, ['credit', 'Credit', 'creditAmount', 'CreditAmount', 'income', 'Income']);
@@ -484,7 +493,7 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
   }
 
   if (debit === undefined && credit === undefined) return null;
-  return { transactionDate, reference, description, debit, credit, currency, counterpartyUnp };
+  return { transactionDate, reference, description, debit, credit, currency, counterpartyUnp, counterpartyName };
 }
 
 // ── DOM scraping fallback ─────────────────────────────────────────────────────
@@ -561,12 +570,13 @@ function parseTurns(turns: AlfaBankTurn[], fallbackCurrency: string): ScrapedTra
 
     transactions.push({
       transactionDate,
-      reference:       t.DocumentNumber    || undefined,
-      description:     t.Destination       || t.CorrespondentName || '',
-      debit:           isCredit ? undefined : Math.abs(amount),
-      credit:          isCredit ? Math.abs(amount) : undefined,
-      currency:        t.CurrencyIso        || fallbackCurrency,
-      counterpartyUnp: unp                  || undefined,
+      reference:        t.DocumentNumber    || undefined,
+      description:      t.Destination       || '',
+      debit:            isCredit ? undefined : Math.abs(amount),
+      credit:           isCredit ? Math.abs(amount) : undefined,
+      currency:         t.CurrencyIso        || fallbackCurrency,
+      counterpartyUnp:  unp                  || undefined,
+      counterpartyName: t.CorrespondentName  || undefined,
     });
   }
 

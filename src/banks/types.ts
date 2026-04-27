@@ -20,6 +20,8 @@ export interface ScrapedTransaction {
   currency: string;
   /** УНП (taxpayer ID) of the counterparty */
   counterpartyUnp?: string;
+  /** Name of the counterparty (organisation or person) */
+  counterpartyName?: string;
 }
 
 export interface StatementRequest {

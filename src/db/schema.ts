@@ -54,6 +54,8 @@ export const transactions = sqliteTable(
     currency: text('currency').notNull(),
     /** УНП (taxpayer ID) of the counterparty */
     counterpartyUnp: text('counterparty_unp'),
+    /** Name of the counterparty (organisation or person) */
+    counterpartyName: text('counterparty_name'),
     /**
      * Deterministic dedup key: reference when available,
      * otherwise a stable string derived from date+description+amounts.

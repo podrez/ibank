@@ -178,6 +178,23 @@ router.post('/statements/refresh', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/statement-accounts
+ * Returns list of accounts configured for statement syncing (from env vars).
+ */
+router.get('/statement-accounts', (_req, res) => {
+  const accounts: { bank: string; accountNumber: string }[] = [];
+
+  for (const acc of (process.env.ALFABANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    accounts.push({ bank: 'alfabank', accountNumber: acc });
+  }
+  for (const acc of (process.env.PRIORBANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    accounts.push({ bank: 'priorbank', accountNumber: acc });
+  }
+
+  res.json({ accounts });
+});
+
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }

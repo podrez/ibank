@@ -50,6 +50,13 @@
       "when": 1776864361149,
       "tag": "0006_complete_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1777270690464,
+      "tag": "0007_spooky_penance",
+      "breakpoints": true
     }
   ]
 }

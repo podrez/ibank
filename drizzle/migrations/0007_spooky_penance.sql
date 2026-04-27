@@ -1,0 +1,1 @@
+ALTER TABLE `transactions` ADD `counterparty_name` text;

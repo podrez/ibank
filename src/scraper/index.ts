@@ -203,6 +203,7 @@ async function persistTransactions(
       credit: tx.credit ?? null,
       currency: tx.currency,
       counterpartyUnp: tx.counterpartyUnp ?? null,
+      counterpartyName: tx.counterpartyName ?? null,
       txKey,
     });
     imported++;
