@@ -315,6 +315,75 @@
     .skel-amount { height: 40px; width: 55%; margin-bottom: 0.25rem; }
     .skel-avail  { height: 13px; width: 50%; margin-bottom: 1rem; }
     .skel-footer { height: 12px; width: 70%; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+
+    /* ── Visibility / edit mode ────────────────────── */
+    .btn-settings {
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      padding: 0.4rem 0.75rem;
+      border: 1px solid var(--border);
+    }
+
+    .btn-settings:hover { background: var(--bg); }
+
+    .btn-settings.is-active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #eff6ff;
+    }
+
+    .edit-mode-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 0.5rem 1rem;
+      background: #eff6ff;
+      border-bottom: 1px solid #bfdbfe;
+    }
+
+    .account-card.is-hidden {
+      opacity: 0.45;
+    }
+
+    .account-card .visibility-btn {
+      display: none;
+      margin-top: 0.75rem;
+      width: 100%;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8125rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+
+    .account-card .visibility-btn:hover {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .account-card.is-hidden .visibility-btn {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .account-card.is-hidden .visibility-btn:hover {
+      background: #eff6ff;
+    }
+
+    body.edit-mode .account-card .visibility-btn { display: block; }
+
+    .hidden-count-badge {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: underline dotted;
+    }
+
+    .hidden-count-badge:hover { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -345,10 +414,15 @@
           · обновление через <b id="countdown-val">30</b>с
         </span>
       </div>
+      <button class="btn btn-settings" id="settings-btn" onclick="toggleEditMode()">&#9881; Настроить</button>
       <button class="btn btn-refresh" id="refresh-btn" onclick="doRefresh()">&#8635; Синхронизировать</button>
       <button class="btn btn-secondary" onclick="doLogout()">Выйти</button>
     </div>
   </header>
+  <div id="edit-mode-hint" class="edit-mode-hint" style="display:none">
+    Режим настройки: нажмите на кнопку под счётом, чтобы скрыть или показать его.
+    <span id="hidden-count-hint"></span>
+  </div>
   <main>
     <div id="accounts-grid"></div>
   </main>
@@ -360,6 +434,10 @@
   let apiKey = sessionStorage.getItem('apiKey') || '';
   let countdownTimer = null;
   let secondsLeft = POLL_SEC;
+
+  let isEditMode = false;
+  let hiddenAccounts = new Set(JSON.parse(localStorage.getItem('hiddenAccounts') || '[]'));
+  let lastAccounts = [];
 
   // ── Boot ──────────────────────────────────────────
   if (apiKey) {
@@ -471,6 +549,25 @@
     document.getElementById('countdown-val').textContent = secondsLeft;
   }
 
+  // ── Edit mode / visibility ────────────────────────
+  function toggleEditMode() {
+    isEditMode = !isEditMode;
+    document.body.classList.toggle('edit-mode', isEditMode);
+    document.getElementById('settings-btn').classList.toggle('is-active', isEditMode);
+    document.getElementById('edit-mode-hint').style.display = isEditMode ? 'block' : 'none';
+    renderAccounts(lastAccounts);
+  }
+
+  function toggleAccountVisibility(key) {
+    if (hiddenAccounts.has(key)) {
+      hiddenAccounts.delete(key);
+    } else {
+      hiddenAccounts.add(key);
+    }
+    localStorage.setItem('hiddenAccounts', JSON.stringify([...hiddenAccounts]));
+    renderAccounts(lastAccounts);
+  }
+
   // ── Render ────────────────────────────────────────
   function renderSkeletons(n) {
     const grid = document.getElementById('accounts-grid');
@@ -489,13 +586,38 @@
   }
 
   function renderAccounts(accounts) {
+    lastAccounts = accounts || [];
     const grid = document.getElementById('accounts-grid');
+
     if (!accounts || accounts.length === 0) {
       grid.innerHTML = '<div class="empty-state">Счета не найдены.<br>Дождитесь первой синхронизации или нажмите «Синхронизировать».</div>';
       return;
     }
-    grid.innerHTML = accounts.map(a => `
-      <div class="account-card">
+
+    const visibleAccounts = isEditMode
+      ? accounts
+      : accounts.filter(a => !hiddenAccounts.has(`${a.bank}:${a.accountNumber}`));
+
+    const hiddenCount = accounts.filter(a => hiddenAccounts.has(`${a.bank}:${a.accountNumber}`)).length;
+
+    // Update hidden count hint in edit mode banner
+    const hint = document.getElementById('hidden-count-hint');
+    if (hint) {
+      hint.textContent = hiddenCount > 0 ? ` Скрыто счетов: ${hiddenCount}.` : '';
+    }
+
+    if (visibleAccounts.length === 0) {
+      grid.innerHTML = `<div class="empty-state">Все счета скрыты.
+        <br><span class="hidden-count-badge" onclick="toggleEditMode()">Настроить видимость</span>
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML = visibleAccounts.map(a => {
+      const key = `${a.bank}:${a.accountNumber}`;
+      const isHidden = hiddenAccounts.has(key);
+      return `
+      <div class="account-card${isHidden ? ' is-hidden' : ''}">
         <div class="card-header">
           <span class="bank-badge bank-${esc(a.bank)}">${bankLabel(a.bank)}</span>
           <span class="currency-tag">${esc(a.currency)}</span>
@@ -516,8 +638,12 @@
         <div class="card-footer">
           Обновлено: ${a.balanceUpdatedAt ? fmtDateTime(a.balanceUpdatedAt) : '—'}
         </div>
+        <button class="visibility-btn" onclick="toggleAccountVisibility('${esc(key)}')">
+          ${isHidden ? '&#128065; Показать счёт' : '&#128683; Скрыть счёт'}
+        </button>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   // ── Helpers ───────────────────────────────────────
