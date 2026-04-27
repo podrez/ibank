@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db, schema } from '../db';
-import { desc, eq, and, gte, lte } from 'drizzle-orm';
+import { desc, eq, and, gte, lte, sql } from 'drizzle-orm';
 import { runSync } from '../scheduler';
 import { getEnabledBanks } from '../banks';
 import { syncBankStatement, syncAllStatements } from '../scraper';
@@ -175,6 +175,37 @@ router.post('/statements/refresh', async (req, res) => {
     syncAllStatements(dateFrom, dateTo)
       .catch((err) => logger.error('Statement refresh error', { error: err.message }));
     res.json({ message: 'Statement refresh started for all configured accounts' });
+  }
+});
+
+/**
+ * GET /api/today-totals
+ * Returns today's credit/debit totals per account (Minsk time, UTC+3).
+ */
+router.get('/today-totals', async (_req, res) => {
+  try {
+    const todayMinsk = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+
+    const rows = await db
+      .select({
+        bank: schema.transactions.bank,
+        accountNumber: schema.transactions.accountNumber,
+        currency: schema.transactions.currency,
+        totalCredit: sql<number>`COALESCE(SUM(${schema.transactions.credit}), 0)`,
+        totalDebit: sql<number>`COALESCE(SUM(${schema.transactions.debit}), 0)`,
+      })
+      .from(schema.transactions)
+      .where(eq(schema.transactions.transactionDate, todayMinsk))
+      .groupBy(
+        schema.transactions.bank,
+        schema.transactions.accountNumber,
+        schema.transactions.currency,
+      );
+
+    res.json({ totals: rows, date: todayMinsk });
+  } catch (err) {
+    logger.error('GET /today-totals error', { error: (err as Error).message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

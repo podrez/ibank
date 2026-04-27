@@ -276,8 +276,31 @@
       font-size: 0.8125rem;
       color: var(--text-muted);
       margin-top: 0.25rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0.5rem;
       min-height: 1.25rem;
+    }
+
+    .today-flow {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.8125rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .flow-credit {
+      color: #16a34a;
+      font-weight: 600;
+    }
+
+    .flow-debit {
+      color: var(--red);
+      font-weight: 600;
+    }
+
+    .flow-label {
+      color: var(--text-muted);
+      font-weight: 400;
     }
 
     .card-footer {
@@ -491,6 +514,31 @@
 
     .stmt-controls input[type=date]:focus { border-color: var(--accent); }
 
+    .stmt-tabs {
+      display: flex;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .stmt-tab {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border: none;
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+
+    .stmt-tab + .stmt-tab { border-left: 1px solid var(--border); }
+
+    .stmt-tab:hover { background: var(--bg); color: var(--text); }
+
+    .stmt-tab.is-active { background: var(--accent); color: #fff; }
+
     .btn-sm {
       padding: 0.375rem 0.875rem;
       font-size: 0.875rem;
@@ -598,6 +646,11 @@
       <input type="date" id="stmt-from" />
       <label for="stmt-to">по</label>
       <input type="date" id="stmt-to" />
+      <div class="stmt-tabs">
+        <button class="stmt-tab is-active" data-dir="all"    onclick="setStmtDir(this)">Все</button>
+        <button class="stmt-tab"           data-dir="debit"  onclick="setStmtDir(this)">Расход</button>
+        <button class="stmt-tab"           data-dir="credit" onclick="setStmtDir(this)">Приход</button>
+      </div>
       <button class="btn btn-sm btn-sm-primary" onclick="loadStatements()">Показать</button>
       <button class="btn btn-sm btn-sm-secondary" id="stmt-refresh-btn" onclick="refreshStatement()">&#8635; Обновить из банка</button>
     </div>
@@ -644,16 +697,18 @@
   let hiddenAccounts = new Set(JSON.parse(localStorage.getItem('hiddenAccounts') || '[]'));
   let lastAccounts = [];
   let statementAccountKeys = new Set();
+  let todayTotals = {}; // key: "bank:accountNumber" → { totalCredit, totalDebit, currency }
 
   // active statement context
   let stmtBank = '';
   let stmtAccount = '';
+  let lastTxs = [];
 
   // ── Boot ──────────────────────────────────────────
   if (apiKey) {
     showDashboard();
     renderSkeletons(3);
-    loadStatementAccounts().then(() => loadAccounts());
+    loadStatementAccounts().then(() => Promise.all([loadTodayTotals(), loadAccounts()]));
     startCountdown();
   }
 
@@ -680,6 +735,7 @@
       apiKey = key;
       showDashboard();
       await loadStatementAccounts();
+      await loadTodayTotals();
       const data = await res.json();
       renderAccounts(data.accounts);
       setStatus(`Счетов: ${data.accounts.length}`);
@@ -707,11 +763,24 @@
       const res = await apiFetch('/api/accounts', 'GET');
       if (res.status === 401) { doLogout(); return; }
       const data = await res.json();
+      await loadTodayTotals();
       renderAccounts(data.accounts);
       setStatus(`Обновлено в ${formatTime(new Date())}`);
     } catch {
       setStatus('Ошибка загрузки', true);
     }
+  }
+
+  async function loadTodayTotals() {
+    try {
+      const res = await apiFetch('/api/today-totals', 'GET');
+      if (!res.ok) return;
+      const data = await res.json();
+      todayTotals = {};
+      for (const row of (data.totals || [])) {
+        todayTotals[`${row.bank}:${row.accountNumber}`] = row;
+      }
+    } catch { /* ignore */ }
   }
 
   async function doRefresh() {
@@ -846,6 +915,7 @@
               ? `Доступно: ${fmtBalance(a.available)}&nbsp;${esc(a.currency)}`
               : ''}
           </div>
+          ${renderTodayFlow(key, a.currency)}
         </div>
         <div class="card-footer">
           Обновлено: ${a.balanceUpdatedAt ? fmtDateTime(a.balanceUpdatedAt) : '—'}
@@ -877,8 +947,9 @@
     stmtAccount = accountNumber;
     document.getElementById('stmt-title-account').textContent =
       `${bankLabel(bank)} · ${fmtAccountNumber(accountNumber)}`;
-    document.getElementById('stmt-from').value = firstDayOfMonthStr();
+    document.getElementById('stmt-from').value = todayStr();
     document.getElementById('stmt-to').value = todayStr();
+    document.querySelectorAll('.stmt-tab').forEach((t, i) => t.classList.toggle('is-active', i === 0));
     document.getElementById('stmt-status').textContent = '';
     document.getElementById('stmt-status').className = '';
     document.getElementById('stmt-content').innerHTML = '';
@@ -911,9 +982,10 @@
       const res = await apiFetch(`/api/statements?${params}`, 'GET');
       if (!res.ok) { setStmtStatus('Ошибка загрузки выписки', true); return; }
       const data = await res.json();
-      renderStmtTable(data.transactions || []);
-      setStmtStatus(data.count > 0
-        ? `Показано транзакций: ${data.count}`
+      lastTxs = data.transactions || [];
+      renderStmtTable(lastTxs);
+      setStmtStatus(lastTxs.length > 0
+        ? `Загружено транзакций: ${lastTxs.length}`
         : '');
     } catch {
       setStmtStatus('Ошибка подключения', true);
@@ -943,14 +1015,33 @@
     }
   }
 
+  function setStmtDir(btn) {
+    document.querySelectorAll('.stmt-tab').forEach(t => t.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    renderStmtTable(lastTxs);
+  }
+
   function renderStmtTable(txs) {
     const el = document.getElementById('stmt-content');
-    if (!txs.length) {
-      el.innerHTML = '<div class="stmt-empty">Транзакций за выбранный период не найдено.</div>';
+
+    const direction = document.querySelector('.stmt-tab.is-active')?.dataset.dir ?? 'all';
+    const filtered = direction === 'debit'  ? txs.filter(t => t.debit  != null)
+                   : direction === 'credit' ? txs.filter(t => t.credit != null)
+                   : txs;
+
+    if (!filtered.length) {
+      el.innerHTML = txs.length
+        ? '<div class="stmt-empty">Нет операций, соответствующих фильтру.</div>'
+        : '<div class="stmt-empty">Транзакций за выбранный период не найдено.</div>';
+      setStmtStatus(txs.length ? `Загружено транзакций: ${txs.length} · показано: 0` : '');
       return;
     }
 
-    const rows = txs.map(t => {
+    if (direction !== 'all') {
+      setStmtStatus(`Загружено транзакций: ${txs.length} · показано: ${filtered.length}`);
+    }
+
+    const rows = filtered.map(t => {
       const counterparty = [t.counterpartyName, t.counterpartyUnp ? `УНП ${t.counterpartyUnp}` : '']
         .filter(Boolean).join(' · ') || '—';
       return `
@@ -996,6 +1087,20 @@
   function firstDayOfMonthStr() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  function renderTodayFlow(key, currency) {
+    const t = todayTotals[key];
+    if (!t) return '';
+    const cur = esc(t.currency || currency);
+    const hasCredit = t.totalCredit > 0;
+    const hasDebit  = t.totalDebit  > 0;
+    if (!hasCredit && !hasDebit) return '';
+    return `<div class="today-flow">
+      ${hasCredit ? `<span class="flow-credit">+&thinsp;${fmtBalance(t.totalCredit)}&nbsp;${cur}</span>` : ''}
+      ${hasDebit  ? `<span class="flow-debit">−&thinsp;${fmtBalance(t.totalDebit)}&nbsp;${cur}</span>`  : ''}
+      <span class="flow-label">сегодня</span>
+    </div>`;
   }
 
   // ── Helpers ───────────────────────────────────────
