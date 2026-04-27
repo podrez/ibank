@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import { router } from './routes';
 import { logger } from '../logger';
 
@@ -17,6 +18,10 @@ export function createApp() {
 
   // Health check (no auth required)
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+  // Web UI — served from public/ relative to the project root
+  const publicDir = path.join(__dirname, '../../public');
+  app.use(express.static(publicDir));
 
   return app;
 }

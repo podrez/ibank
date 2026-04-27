@@ -15,6 +15,9 @@ RUN npm run build
 # Copy migration files
 COPY drizzle ./drizzle
 
+# Web UI static assets
+COPY public ./public
+
 # Data directory for SQLite and logs
 RUN mkdir -p /app/data
 

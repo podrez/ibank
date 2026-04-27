@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iBank · Остатки</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #e3e6ec;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --red: #dc2626;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.1);
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Login ─────────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 2.5rem 2.25rem;
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .login-logo {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      margin-bottom: 0.25rem;
+    }
+
+    .login-logo span { color: var(--accent); }
+
+    .login-card > p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+
+    .field { margin-bottom: 0; }
+
+    .field label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 0.375rem;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      font-size: 0.9375rem;
+      font-family: 'Courier New', monospace;
+      outline: none;
+      transition: border-color .15s;
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .field input:focus { border-color: var(--accent); }
+
+    .error-msg {
+      color: var(--red);
+      font-size: 0.8125rem;
+      margin-top: 0.5rem;
+      min-height: 1.25rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.625rem 1.125rem;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      transition: background .15s, opacity .15s, border-color .15s;
+      white-space: nowrap;
+    }
+
+    .btn:disabled { opacity: .55; cursor: default; pointer-events: none; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      width: 100%;
+      margin-top: 1.25rem;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    /* ── Dashboard ─────────────────────────────────── */
+    #dashboard { display: none; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.75rem;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-title {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+
+    .header-title span { color: var(--accent); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.875rem;
+    }
+
+    .status-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+    }
+
+    #status-bar {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    #status-bar.is-error { color: var(--red); }
+
+    .countdown {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    .btn-refresh {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.875rem;
+    }
+
+    .btn-refresh:hover { background: var(--accent-hover); }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      padding: 0.4rem 0.75rem;
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--bg); }
+
+    /* ── Grid ───────────────────────────────────────── */
+    main {
+      padding: 1.5rem 1.75rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    #accounts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 1rem;
+    }
+
+    /* ── Account card ──────────────────────────────── */
+    .account-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border);
+      padding: 1.25rem 1.375rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .bank-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .bank-alfabank  { background: #fee2e2; color: #991b1b; }
+    .bank-priorbank { background: #dbeafe; color: #1e40af; }
+    .bank-unknown   { background: #f3f4f6; color: #374151; }
+
+    .currency-tag {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: var(--text-muted);
+    }
+
+    .account-name {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-bottom: 0.2rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .account-number {
+      font-family: 'Courier New', monospace;
+      font-size: 0.775rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      letter-spacing: .03em;
+    }
+
+    .balance-block { flex: 1; }
+
+    .balance-amount {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 0.2rem;
+    }
+
+    .balance-currency {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 0.25rem;
+    }
+
+    .available-line {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      margin-bottom: 1rem;
+      min-height: 1.25rem;
+    }
+
+    .card-footer {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      margin-top: auto;
+    }
+
+    /* ── Empty / skeleton ──────────────────────────── */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 4rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.9375rem;
+    }
+
+    @keyframes shimmer {
+      from { background-position: -600px 0; }
+      to   { background-position:  600px 0; }
+    }
+
+    .skel {
+      background: linear-gradient(90deg, #ebebeb 25%, #d8d8d8 50%, #ebebeb 75%);
+      background-size: 1200px 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+    }
+
+    .skel-badge  { height: 20px; width: 90px; border-radius: 5px; }
+    .skel-label  { height: 14px; width: 65%; margin-bottom: 0.3rem; }
+    .skel-mono   { height: 12px; width: 80%; margin-bottom: 1rem; }
+    .skel-amount { height: 40px; width: 55%; margin-bottom: 0.25rem; }
+    .skel-avail  { height: 13px; width: 50%; margin-bottom: 1rem; }
+    .skel-footer { height: 12px; width: 70%; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+<!-- ──────────────── Login ──────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">i<span>Bank</span></div>
+    <p>Остатки на расчётных счетах</p>
+    <div class="field">
+      <label for="api-key-input">API-ключ</label>
+      <input id="api-key-input" type="password" placeholder="Введите ключ доступа"
+             autocomplete="current-password" />
+    </div>
+    <div id="login-error" class="error-msg"></div>
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Войти</button>
+  </div>
+</div>
+
+<!-- ──────────────── Dashboard ──────────── -->
+<div id="dashboard">
+  <header>
+    <div class="header-title">i<span>Bank</span> · Остатки на счетах</div>
+    <div class="header-right">
+      <div class="status-wrap">
+        <span id="status-bar"></span>
+        <span id="countdown-wrap" class="countdown" style="display:none">
+          · обновление через <b id="countdown-val">30</b>с
+        </span>
+      </div>
+      <button class="btn btn-refresh" id="refresh-btn" onclick="doRefresh()">&#8635; Синхронизировать</button>
+      <button class="btn btn-secondary" onclick="doLogout()">Выйти</button>
+    </div>
+  </header>
+  <main>
+    <div id="accounts-grid"></div>
+  </main>
+</div>
+
+<script>
+  const POLL_SEC = 30;
+
+  let apiKey = sessionStorage.getItem('apiKey') || '';
+  let countdownTimer = null;
+  let secondsLeft = POLL_SEC;
+
+  // ── Boot ──────────────────────────────────────────
+  if (apiKey) {
+    showDashboard();
+    renderSkeletons(3);
+    loadAccounts();
+    startCountdown();
+  }
+
+  document.getElementById('api-key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  // ── Auth ──────────────────────────────────────────
+  async function doLogin() {
+    const key = document.getElementById('api-key-input').value.trim();
+    if (!key) return;
+
+    setLoginBtn(true, 'Проверка...');
+    setLoginError('');
+
+    try {
+      const res = await apiFetch('/api/accounts', 'GET', key);
+      if (res.status === 401) {
+        setLoginError('Неверный API-ключ');
+        setLoginBtn(false, 'Войти');
+        return;
+      }
+      sessionStorage.setItem('apiKey', key);
+      apiKey = key;
+      showDashboard();
+      const data = await res.json();
+      renderAccounts(data.accounts);
+      setStatus(`Счетов: ${data.accounts.length}`);
+      startCountdown();
+    } catch {
+      setLoginError('Не удалось подключиться к серверу');
+      setLoginBtn(false, 'Войти');
+    }
+  }
+
+  function doLogout() {
+    sessionStorage.removeItem('apiKey');
+    apiKey = '';
+    stopCountdown();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('api-key-input').value = '';
+    setLoginError('');
+    setLoginBtn(false, 'Войти');
+  }
+
+  // ── Data ──────────────────────────────────────────
+  async function loadAccounts() {
+    try {
+      const res = await apiFetch('/api/accounts', 'GET');
+      if (res.status === 401) { doLogout(); return; }
+      const data = await res.json();
+      renderAccounts(data.accounts);
+      setStatus(`Обновлено в ${formatTime(new Date())}`);
+    } catch {
+      setStatus('Ошибка загрузки', true);
+    }
+  }
+
+  async function doRefresh() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Синхронизация...';
+    stopCountdown();
+    setStatus('Синхронизация запущена...');
+
+    try {
+      await apiFetch('/api/refresh', 'POST');
+      await sleep(6000);
+      await loadAccounts();
+    } catch {
+      setStatus('Ошибка запроса синхронизации', true);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '&#8635; Синхронизировать';
+      startCountdown();
+    }
+  }
+
+  // ── Countdown ─────────────────────────────────────
+  function startCountdown() {
+    stopCountdown();
+    secondsLeft = POLL_SEC;
+    document.getElementById('countdown-wrap').style.display = 'inline';
+    updateCountdownDisplay();
+    countdownTimer = setInterval(async () => {
+      secondsLeft--;
+      updateCountdownDisplay();
+      if (secondsLeft <= 0) {
+        secondsLeft = POLL_SEC;
+        await loadAccounts();
+      }
+    }, 1000);
+  }
+
+  function stopCountdown() {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+    document.getElementById('countdown-wrap').style.display = 'none';
+  }
+
+  function updateCountdownDisplay() {
+    document.getElementById('countdown-val').textContent = secondsLeft;
+  }
+
+  // ── Render ────────────────────────────────────────
+  function renderSkeletons(n) {
+    const grid = document.getElementById('accounts-grid');
+    grid.innerHTML = Array.from({ length: n }, () => `
+      <div class="account-card">
+        <div class="card-header">
+          <div class="skel skel-badge"></div>
+        </div>
+        <div class="skel skel-label"></div>
+        <div class="skel skel-mono"></div>
+        <div class="skel skel-amount"></div>
+        <div class="skel skel-avail"></div>
+        <div class="skel skel-footer"></div>
+      </div>
+    `).join('');
+  }
+
+  function renderAccounts(accounts) {
+    const grid = document.getElementById('accounts-grid');
+    if (!accounts || accounts.length === 0) {
+      grid.innerHTML = '<div class="empty-state">Счета не найдены.<br>Дождитесь первой синхронизации или нажмите «Синхронизировать».</div>';
+      return;
+    }
+    grid.innerHTML = accounts.map(a => `
+      <div class="account-card">
+        <div class="card-header">
+          <span class="bank-badge bank-${esc(a.bank)}">${bankLabel(a.bank)}</span>
+          <span class="currency-tag">${esc(a.currency)}</span>
+        </div>
+        ${a.name ? `<div class="account-name" title="${esc(a.name)}">${esc(a.name)}</div>` : ''}
+        <div class="account-number">${fmtAccountNumber(a.accountNumber)}</div>
+        <div class="balance-block">
+          <div>
+            <span class="balance-amount">${fmtBalance(a.balance)}</span>
+            <span class="balance-currency">${esc(a.currency)}</span>
+          </div>
+          <div class="available-line">
+            ${a.available != null && a.available !== a.balance
+              ? `Доступно: ${fmtBalance(a.available)}&nbsp;${esc(a.currency)}`
+              : ''}
+          </div>
+        </div>
+        <div class="card-footer">
+          Обновлено: ${a.balanceUpdatedAt ? fmtDateTime(a.balanceUpdatedAt) : '—'}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── Helpers ───────────────────────────────────────
+  function apiFetch(path, method = 'GET', key) {
+    return fetch(path, {
+      method,
+      headers: { 'X-Api-Key': key ?? apiKey },
+    });
+  }
+
+  function bankLabel(bank) {
+    return { alfabank: 'Альфа-Банк', priorbank: 'Приорбанк' }[bank] ?? bank;
+  }
+
+  function fmtBalance(val) {
+    if (val == null) return '—';
+    return new Intl.NumberFormat('ru-BY', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(val);
+  }
+
+  function fmtAccountNumber(num) {
+    if (!num) return '—';
+    return num.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function fmtDateTime(iso) {
+    if (!iso) return '—';
+    const s = iso.includes('Z') || iso.includes('+') ? iso : iso + 'Z';
+    return new Date(s).toLocaleString('ru-BY', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'Europe/Minsk',
+    });
+  }
+
+  function formatTime(d) {
+    return d.toLocaleTimeString('ru-BY', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZone: 'Europe/Minsk',
+    });
+  }
+
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function setStatus(msg, isError = false) {
+    const el = document.getElementById('status-bar');
+    el.textContent = msg;
+    el.className = isError ? 'is-error' : '';
+  }
+
+  function setLoginBtn(disabled, label) {
+    const btn = document.getElementById('login-btn');
+    btn.disabled = disabled;
+    btn.textContent = label;
+  }
+
+  function setLoginError(msg) {
+    document.getElementById('login-error').textContent = msg;
+  }
+
+  function showDashboard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+  }
+</script>
+</body>
+</html>

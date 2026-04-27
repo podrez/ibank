@@ -179,26 +179,64 @@ async function domScrape(page: Page): Promise<ScrapedAccount[]> {
 function parseCardText(text: string): ScrapedAccount | null {
   if (!text.trim()) return null;
 
-  // IBAN BY format: BY + 2 digits + 4 alphanum + 20 digits
+  // Cards use tab-separated fields: name TAB IBAN TAB balance TAB currency
+  // Split on any combination of tabs/newlines to process fields individually.
+  // This avoids greedy cross-field matching that would swallow account number digits.
+  const parts = text.split(/[\t\n\r]+/).map((s) => s.trim()).filter(Boolean);
+
   const ibanMatch = text.match(/BY\d{2}[A-Z0-9]{4}\d{16,20}/i);
   const numMatch = text.match(/\b\d{20,}\b/) ?? text.match(/\b\d{13,}\b/);
   const accountNumber = ibanMatch?.[0] ?? numMatch?.[0] ?? '';
 
-  const balanceMatch = text.match(/([\d\s ]+[.,]\d{2})\s*(BYN|USD|EUR|RUB|CNY)/i);
-  if (!balanceMatch) return null;
+  const ibanRe = /^BY\d{2}[A-Z0-9]{4}\d{16,}/i;
+  const currencyRe = /^(BYN|USD|EUR|RUB|CNY)$/i;
+  // Balance field: optional leading minus, digits/spaces, decimal separator, 2 digits
+  const balanceRe = /^-?[\d\s ]+[.,]\d{2}$/;
+  // Balance with inline currency: "28 073.49 BYN"
+  const inlineRe = /^(-?[\d\s ]+[.,]\d{2})\s+(BYN|USD|EUR|RUB|CNY)$/i;
+  const availRe = /[Дд]оступно[:\s]*(-?[\d\s ]+[.,]\d{2})(?:\s*(BYN|USD|EUR|RUB|CNY))?/i;
 
-  const balance = parseFloat(balanceMatch[1].replace(/[\s ]/g, '').replace(',', '.'));
-  const currency = balanceMatch[2].toUpperCase();
+  let currency = '';
+  let balance: number | null = null;
+  let available: number | null = null;
+  let name = '';
 
-  const availMatch = text.match(/[Дд]оступно[:\s]*([\d\s ]+[.,]\d{2})\s*(BYN|USD|EUR|RUB|CNY)/i);
-  const available = availMatch
-    ? parseFloat(availMatch[1].replace(/[\s ]/g, '').replace(',', '.'))
-    : null;
+  for (const p of parts) {
+    if (ibanRe.test(p)) continue;
 
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const name = lines[0] ?? '';
+    const availM = availRe.exec(p);
+    if (availM) {
+      available = parseFloat(availM[1].replace(/[\s ]/g, '').replace(',', '.'));
+      if (availM[2] && !currency) currency = availM[2].toUpperCase();
+      continue;
+    }
 
-  if (!accountNumber || isNaN(balance)) return null;
+    const inlineM = inlineRe.exec(p);
+    if (inlineM) {
+      if (balance === null) balance = parseFloat(inlineM[1].replace(/[\s ]/g, '').replace(',', '.'));
+      if (!currency) currency = inlineM[2].toUpperCase();
+      continue;
+    }
+
+    if (currencyRe.test(p)) {
+      if (!currency) currency = p.toUpperCase();
+      continue;
+    }
+
+    if (balanceRe.test(p)) {
+      if (balance === null) balance = parseFloat(p.replace(/[\s ]/g, '').replace(',', '.'));
+      continue;
+    }
+
+    if (!name) name = p;
+  }
+
+  if (!currency) {
+    const m = text.match(/\b(BYN|USD|EUR|RUB|CNY)\b/i);
+    if (m) currency = m[1].toUpperCase();
+  }
+
+  if (!accountNumber || !currency || balance === null || isNaN(balance)) return null;
   return { accountNumber, currency, name, balance, available };
 }
 

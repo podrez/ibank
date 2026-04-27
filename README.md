@@ -44,6 +44,17 @@ docker compose logs -f
 
 The service is available at `http://localhost:3000`.
 
+## Web UI
+
+A built-in dashboard is served at `http://localhost:3000/`.
+
+- **Login screen** — enter the `API_KEY` value; the key is stored in `sessionStorage` for the browser session.
+- **Account cards** — show bank name, account number, currency, current balance, and the time the balance was last scraped.
+- **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
+- **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
+
+No build step is required; the UI is a single self-contained HTML file served by Express.
+
 ## Environment variables
 
 A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable that bank.
@@ -100,12 +111,15 @@ All endpoints (except `/health`) require authentication via one of:
 {
   "accounts": [
     {
+      "id": 1,
       "bank": "alfabank",
       "accountNumber": "BY12ALFA...",
       "currency": "BYN",
-      "balance": "1234.56",
-      "available": "1234.56",
-      "updatedAt": "2024-01-15T10:00:05.000Z"
+      "name": "Текущий счет",
+      "balance": 1234.56,
+      "available": 1234.56,
+      "balanceUpdatedAt": "2024-01-15T10:00:05.000Z",
+      "createdAt": "2024-01-01T00:00:00.000Z"
     }
   ],
   "count": 3
