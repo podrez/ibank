@@ -1062,7 +1062,6 @@
         <td class="stmt-ref">${esc(t.reference || '—')}</td>
         <td class="stmt-debit">${t.debit != null ? fmtBalance(t.debit) : ''}</td>
         <td class="stmt-credit">${t.credit != null ? fmtBalance(t.credit) : ''}</td>
-        <td class="stmt-ref">${esc(t.currency)}</td>
       </tr>
     `}).join('');
 
@@ -1075,7 +1074,6 @@
           <col class="col-ref">
           <col class="col-amount">
           <col class="col-amount">
-          <col class="col-cur">
         </colgroup>
         <thead>
           <tr>
@@ -1085,7 +1083,6 @@
             <th>Документ</th>
             <th style="text-align:right">Дебет</th>
             <th style="text-align:right">Кредит</th>
-            <th>Валюта</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
