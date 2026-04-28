@@ -1056,7 +1056,7 @@
       const cpCell = cpName ? cpName + cpUnp : (t.counterpartyUnp ? `<span class="stmt-unp">УНП&nbsp;${esc(t.counterpartyUnp)}</span>` : '—');
       return `
       <tr>
-        <td class="stmt-date">${esc(t.transactionDate)}</td>
+        <td class="stmt-date">${fmtDate(t.transactionDate)}</td>
         <td class="stmt-desc">${cpCell}</td>
         <td class="stmt-desc">${esc(t.description || '—')}</td>
         <td class="stmt-ref">${esc(t.reference || '—')}</td>
@@ -1142,6 +1142,12 @@
   function fmtAccountNumber(num) {
     if (!num) return '—';
     return num.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.slice(0, 10).split('-');
+    return `${d}.${m}.${y}`;
   }
 
   function fmtDateTime(iso) {
