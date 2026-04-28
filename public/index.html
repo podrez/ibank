@@ -564,7 +564,7 @@
 
     .stmt-body {
       padding: 1rem 1.5rem 1.5rem;
-      overflow-x: auto;
+      overflow-x: hidden;
     }
 
     #stmt-status {
@@ -578,9 +578,17 @@
 
     .stmt-table {
       width: 100%;
+      table-layout: fixed;
       border-collapse: collapse;
       font-size: 0.875rem;
     }
+
+    .stmt-table col.col-date   { width: 82px; }
+    .stmt-table col.col-cp     { width: 22%; }
+    .stmt-table col.col-desc   { width: 30%; }
+    .stmt-table col.col-ref    { width: 14%; }
+    .stmt-table col.col-amount { width: 90px; }
+    .stmt-table col.col-cur    { width: 44px; }
 
     .stmt-table th {
       text-align: left;
@@ -602,11 +610,12 @@
 
     .stmt-table tr:hover td { background: var(--bg); }
 
-    .stmt-debit  { color: var(--red); font-variant-numeric: tabular-nums; text-align: right; }
-    .stmt-credit { color: #16a34a;   font-variant-numeric: tabular-nums; text-align: right; }
+    .stmt-debit  { color: var(--red); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .stmt-credit { color: #16a34a;   font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
     .stmt-date   { white-space: nowrap; font-family: 'Courier New', monospace; font-size: 0.8rem; }
-    .stmt-ref    { font-family: 'Courier New', monospace; font-size: 0.75rem; color: var(--text-muted); }
-    .stmt-desc   { max-width: 320px; }
+    .stmt-ref    { font-family: 'Courier New', monospace; font-size: 0.75rem; color: var(--text-muted); word-break: break-all; }
+    .stmt-desc   { word-break: break-word; overflow-wrap: anywhere; }
+    .stmt-unp    { font-size: 0.72rem; color: var(--text-muted); }
 
     .stmt-empty {
       text-align: center;
@@ -1042,12 +1051,13 @@
     }
 
     const rows = filtered.map(t => {
-      const counterparty = [t.counterpartyName, t.counterpartyUnp ? `УНП ${t.counterpartyUnp}` : '']
-        .filter(Boolean).join(' · ') || '—';
+      const cpName = t.counterpartyName ? esc(t.counterpartyName) : '';
+      const cpUnp  = t.counterpartyUnp  ? `<br><span class="stmt-unp">УНП&nbsp;${esc(t.counterpartyUnp)}</span>` : '';
+      const cpCell = cpName ? cpName + cpUnp : (t.counterpartyUnp ? `<span class="stmt-unp">УНП&nbsp;${esc(t.counterpartyUnp)}</span>` : '—');
       return `
       <tr>
         <td class="stmt-date">${esc(t.transactionDate)}</td>
-        <td class="stmt-desc">${esc(counterparty)}</td>
+        <td class="stmt-desc">${cpCell}</td>
         <td class="stmt-desc">${esc(t.description || '—')}</td>
         <td class="stmt-ref">${esc(t.reference || '—')}</td>
         <td class="stmt-debit">${t.debit != null ? fmtBalance(t.debit) : ''}</td>
@@ -1058,6 +1068,15 @@
 
     el.innerHTML = `
       <table class="stmt-table">
+        <colgroup>
+          <col class="col-date">
+          <col class="col-cp">
+          <col class="col-desc">
+          <col class="col-ref">
+          <col class="col-amount">
+          <col class="col-amount">
+          <col class="col-cur">
+        </colgroup>
         <thead>
           <tr>
             <th>Дата</th>
