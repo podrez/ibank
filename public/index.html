@@ -226,9 +226,12 @@
       text-transform: uppercase;
     }
 
-    .bank-alfabank  { background: #fee2e2; color: #991b1b; }
-    .bank-priorbank { background: #dbeafe; color: #1e40af; }
+    .bank-alfabank  { background: #FDECEB; color: #BF1E0E; }
+    .bank-priorbank { background: #FFF9E6; color: #7A5500; }
     .bank-unknown   { background: #f3f4f6; color: #374151; }
+
+    .bank-card-alfabank  { border-top: 3px solid #EF3124; }
+    .bank-card-priorbank { border-top: 3px solid #FFD100; }
 
     .currency-tag {
       font-size: 0.75rem;
@@ -907,7 +910,7 @@
       const isHidden = hiddenAccounts.has(key);
       const hasStmt = statementAccountKeys.has(key);
       return `
-      <div class="account-card${isHidden ? ' is-hidden' : ''}${hasStmt ? ' has-statement' : ''}">
+      <div class="account-card bank-card-${esc(a.bank)}${isHidden ? ' is-hidden' : ''}${hasStmt ? ' has-statement' : ''}">
         <div class="card-header">
           <span class="bank-badge bank-${esc(a.bank)}">${bankLabel(a.bank)}</span>
           <span class="currency-tag">${esc(a.currency)}</span>
