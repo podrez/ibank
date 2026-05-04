@@ -726,6 +726,13 @@
     startCountdown();
   }
 
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && apiKey && secondsLeft < POLL_SEC) {
+      secondsLeft = POLL_SEC;
+      loadAccounts();
+    }
+  });
+
   document.getElementById('api-key-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
   });
