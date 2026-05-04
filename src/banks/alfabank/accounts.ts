@@ -8,7 +8,13 @@ import fs from 'fs';
  * Strategy 1: intercept XHR/fetch responses that contain account JSON.
  * Strategy 2: DOM scraping of account cards.
  */
+const DASHBOARD_URL = 'https://online.alfabank.by/Cabinet/Dashboard/';
+
 export async function scrapeAccounts(page: Page): Promise<ScrapedAccount[]> {
+  if (!page.url().includes('/Cabinet/Dashboard')) {
+    await page.goto(DASHBOARD_URL, { waitUntil: 'domcontentloaded' });
+  }
+
   logger.info('[alfabank] Scraping account balances', { url: page.url() });
 
   const apiAccounts = await tryApiIntercept(page);
