@@ -12,7 +12,7 @@ export class PriorbankAdapter implements BankAdapter {
   private activePage: Page | null = null;
 
   async isLoggedIn(): Promise<boolean> {
-    if (!this.activePage) return false;
+    if (!this.activePage || this.activePage.isClosed()) return false;
     return isLoggedIn(this.activePage);
   }
 
@@ -20,6 +20,7 @@ export class PriorbankAdapter implements BankAdapter {
     if (this.activePage && !this.activePage.isClosed()) {
       await this.activePage.close().catch(() => null);
     }
+    this.activePage = null;
     this.activePage = await login();
   }
 
