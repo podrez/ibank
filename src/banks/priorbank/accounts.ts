@@ -11,7 +11,13 @@ import fs from 'fs';
  * If scraping fails, set DEBUG_SCREENSHOTS=true and inspect
  * ./data/debug/priorbank-dashboard.html to identify the correct selectors.
  */
+const CABINET_URL = 'https://www.ibank.priorbank.by/v1/cabinet/';
+
 export async function scrapeAccounts(page: Page): Promise<ScrapedAccount[]> {
+  if (!/\/v1\/cabinet\/?$/i.test(page.url())) {
+    await page.goto(CABINET_URL, { waitUntil: 'domcontentloaded' });
+  }
+
   logger.info('[priorbank] Scraping account balances', { url: page.url() });
 
   const apiAccounts = await tryApiIntercept(page);
