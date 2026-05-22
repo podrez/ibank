@@ -21,7 +21,7 @@ docker compose logs -f     # Follow logs
 
 **Purpose**: Headless browser service that logs into multiple Belarusian banks, scrapes account balances every 5 minutes on weekdays 09:00–17:00 Minsk time, persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
-**Supported banks**: Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`)
+**Supported banks**: Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY (`eparitet.by`)
 
 **Tech stack**: Node.js + TypeScript, Playwright (Chromium), Drizzle ORM + better-sqlite3 (SQLite), Express, node-cron, Docker.
 
@@ -46,6 +46,7 @@ Scheduler (node-cron)
 | `src/banks/alfabank/` | Alfa-Bank BY adapter (auth + accounts + statements) |
 | `src/banks/priorbank/` | Priorbank BY adapter (auth + accounts + statements) |
 | `src/banks/belveb/` | БелВЭБ BY adapter (auth + accounts + statements) |
+| `src/banks/paritetbank/` | Паритетбанк BY adapter (auth + accounts + statements) |
 | `src/scraper/browser.ts` | Shared Chromium browser; one isolated context per bank |
 | `src/scraper/index.ts` | Orchestrates syncAllBanks / syncBankBalances / syncAllStatements / syncBankStatement |
 | `src/scheduler/index.ts` | Cron job Mon–Fri, UTC+3, guards concurrent syncs |
@@ -83,6 +84,7 @@ If a bank's scraper can't find account cards (DOM scraping path), set `DEBUG_SCR
 - Alfa-Bank: `./data/debug/alfabank-dashboard.html` / `./data/debug/alfabank-dashboard.png`
 - Priorbank: `./data/debug/priorbank-dashboard.html` / `./data/debug/priorbank-dashboard.png`
 - БелВЭБ: `./data/debug/belveb-dashboard.html` / `./data/debug/belveb-dashboard.png`
+- Паритетбанк: `./data/debug/paritetbank-accounts-response.json`
 
 Update `domScrape()` in the relevant `src/banks/<bank>/accounts.ts`.
 
@@ -92,6 +94,7 @@ If statement scraping fails (DOM fallback), set `DEBUG_SCREENSHOTS=true`. Each b
 - `./data/debug/alfabank-statement-<account>.html` / `.png`
 - `./data/debug/priorbank-statement-<account>.html` / `.png`
 - `./data/debug/belveb-statement-<account>.html` / `.png`
+- `./data/debug/paritetbank-stmt-<account>-response.json`
 
 Update `domScrape()` in the relevant `src/banks/<bank>/statements.ts`.
 
@@ -101,10 +104,13 @@ Defined in `.env.example`. Key variables:
 - `ALFABANK_LOGIN`, `ALFABANK_PASSWORD` — Alfa-Bank credentials (also accepts legacy `BANK_LOGIN`/`BANK_PASSWORD`)
 - `PRIORBANK_LOGIN`, `PRIORBANK_PASSWORD` — Priorbank credentials
 - `BELVEB_LOGIN`, `BELVEB_PASSWORD` — БелВЭБ credentials
+- `PARITETBANK_LOGIN`, `PARITETBANK_PASSWORD` — Паритетбанк credentials
+- `PARITETBANK_ORG` — (optional) org name to select if the account has multiple organisations
 - A bank is **enabled** when its LOGIN env var is set
 - `ALFABANK_STATEMENT_ACCOUNTS` — comma-separated account numbers for automatic statement sync
 - `PRIORBANK_STATEMENT_ACCOUNTS` — same for Priorbank
 - `BELVEB_STATEMENT_ACCOUNTS` — same for БелВЭБ
+- `PARITETBANK_STATEMENT_ACCOUNTS` — same for Паритетбанк
 - `API_KEY` — protects the REST API
 - `DEBUG_SCREENSHOTS=true` — saves Playwright screenshots/HTML per bank
 - `HEADLESS=false` — run Chromium in headed mode for local debugging

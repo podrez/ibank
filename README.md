@@ -2,7 +2,7 @@
 
 Headless browser service that logs into multiple Belarusian banks, scrapes account balances every 5 minutes on weekdays (09:00–17:00 Minsk time), persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
-**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`)
+**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY (`eparitet.by`)
 
 ## Tech stack
 
@@ -53,7 +53,7 @@ A built-in dashboard is served at `http://localhost:3000/`.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
 - **Visibility toggle** — the "Настроить" button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
-- **Statement viewer** — accounts listed in `ALFABANK_STATEMENT_ACCOUNTS` / `PRIORBANK_STATEMENT_ACCOUNTS` / `BELVEB_STATEMENT_ACCOUNTS` show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
+- **Statement viewer** — accounts listed in `*_STATEMENT_ACCOUNTS` env vars show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
@@ -69,6 +69,9 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `PRIORBANK_PASSWORD` | — | Priorbank BY password |
 | `BELVEB_LOGIN` | — | БелВЭБ BY login (leave empty to disable) |
 | `BELVEB_PASSWORD` | — | БелВЭБ BY password |
+| `PARITETBANK_LOGIN` | — | Паритетбанк BY login (leave empty to disable) |
+| `PARITETBANK_PASSWORD` | — | Паритетбанк BY password |
+| `PARITETBANK_ORG` | — | Organisation name to select on login (only needed for multi-org accounts; first org is used if empty) |
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
 | `API_PORT` | `3000` | HTTP port for the REST API |
 | `API_KEY` | — | Secret key to protect the API |
@@ -79,6 +82,7 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
 | `PRIORBANK_STATEMENT_ACCOUNTS` | — | Same for Priorbank |
 | `BELVEB_STATEMENT_ACCOUNTS` | — | Same for БелВЭБ |
+| `PARITETBANK_STATEMENT_ACCOUNTS` | — | Same for Паритетбанк |
 | `ONEC_WEBHOOK_URL` | — | 1C webhook URL to notify on new transactions (leave empty to disable) |
 | `ONEC_USERNAME` | — | Basic auth username for 1C |
 | `ONEC_PASSWORD` | — | Basic auth password for 1C |
@@ -86,7 +90,7 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `HEADLESS` | `true` | Run Chromium headless (`false` for local debug) |
 | `BROWSER_TIMEOUT_MS` | `30000` | Playwright navigation timeout (ms) |
 | `CHROMIUM_EXECUTABLE_PATH` | — | Path to a native Chromium binary (e.g. `/usr/bin/chromium-browser` on ARM64 hosts where the bundled x86_64 binary won't run) |
-| `DEBUG_SCREENSHOTS` | `false` | Save screenshots/HTML to `./data/debug/` per bank |
+| `DEBUG_SCREENSHOTS` | `false` | Save debug snapshots to `./data/debug/` per bank |
 | `LOG_LEVEL` | `info` | Winston log level |
 
 ## REST API
@@ -139,17 +143,21 @@ Scheduler (node-cron)
   └─► scraper/index.ts (syncAllBanks / syncAllStatements)
         └─► for each enabled bank:
               ├─► banks/<bank>/auth.ts      — Playwright login
-              ├─► banks/<bank>/accounts.ts  — Scrape balances (API intercept → DOM fallback)
+              ├─► banks/<bank>/accounts.ts  — Scrape balances
               │     └─► db/index.ts         — Persist to SQLite (keyed by bank + accountNumber)
               │           └─► GET /api/accounts — Served to 1C
-              └─► banks/<bank>/statements.ts — Scrape transactions (API intercept → DOM fallback)
+              └─► banks/<bank>/statements.ts — Scrape transactions
                     └─► db/index.ts          — Persist to SQLite (transactions table)
                           └─► notify/onec.ts — POST to 1C webhook on new imports
 ```
 
-The scraper first attempts to intercept XHR/fetch responses matching the bank's internal API patterns. If that yields nothing, it falls back to DOM scraping with multiple CSS selector strategies.
+Each bank adapter uses the strategy best suited to that bank's web application:
 
-Statement scraping works the same way and stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
+- **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback
+- **БелВЭБ** — Kendo Grid DOM scraping via BIA platform portlets, with direct AJAX portlet fetch as fallback
+- **Паритетбанк** — direct REST API calls (`/corporate/web-api/v1/`) via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
+
+Statement scraping stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
 
 ## Development
 
@@ -165,16 +173,16 @@ npm run db:studio    # Open Drizzle Studio (DB browser)
 
 ## Debugging the scraper
 
-If a bank's scraper fails to find account cards via DOM scraping:
+Set `DEBUG_SCREENSHOTS=true` in `.env`, trigger a sync, then inspect the saved files in `./data/debug/`:
 
-1. Set `DEBUG_SCREENSHOTS=true` in `.env`
-2. Trigger a sync and inspect the saved files:
-   - `./data/debug/alfabank-dashboard.html` / `alfabank-dashboard.png`
-   - `./data/debug/priorbank-dashboard.html` / `priorbank-dashboard.png`
-   - `./data/debug/belveb-dashboard.html` / `belveb-dashboard.png`
-3. Update CSS selectors in the relevant `src/banks/<bank>/accounts.ts`
+| Bank | Balance debug files | Statement debug files |
+|---|---|---|
+| Alfa-Bank | `alfabank-dashboard.html` / `.png` | `alfabank-statement-<account>.html` / `.png` |
+| Priorbank | `priorbank-dashboard.html` / `.png` | `priorbank-statement-<account>.html` / `.png` |
+| БелВЭБ | `belveb-dashboard.html` / `.png` | `belveb-stmt-<account>-<step>.html` / `.png` |
+| Паритетбанк | `paritetbank-accounts-response.json` | `paritetbank-stmt-<account>-response.json` |
 
-For statement scraping failures, the debug files are saved to `./data/debug/` with the bank name prefix (e.g. `belveb-stmt-<account>-<step>.html`).
+Update the relevant `src/banks/<bank>/accounts.ts` or `statements.ts` based on what the debug files reveal.
 
 ## 1C notifications
 
@@ -201,3 +209,4 @@ Notification failures are logged as warnings and do not interrupt the sync.
 3. Create `src/banks/<bankid>/statements.ts` — `scrapeStatement(page, req): Promise<ScrapedTransaction[]>` (optional)
 4. Create `src/banks/<bankid>/index.ts` — class implementing `BankAdapter`
 5. Register in `src/banks/index.ts` under a new env var (e.g. `NEWBANK_LOGIN`)
+6. Add theming in `public/index.html`: CSS classes `.bank-<id>` and `.bank-card-<id>`, and entries in `bankLabel()` and `bankIcon()`

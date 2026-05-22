@@ -225,6 +225,9 @@ router.get('/statement-accounts', (_req, res) => {
   for (const acc of (process.env.BELVEB_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
     accounts.push({ bank: 'belveb', accountNumber: acc });
   }
+  for (const acc of (process.env.PARITETBANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    accounts.push({ bank: 'paritetbank', accountNumber: acc });
+  }
 
   res.json({ accounts });
 });

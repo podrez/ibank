@@ -1,18 +1,18 @@
-import { Page } from 'playwright';
 import { BankAdapter, ScrapedAccount, ScrapedTransaction, StatementRequest } from '../types';
 import { resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
+import { Page } from 'playwright';
 import { login, isLoggedIn } from './auth';
 import { scrapeAccounts } from './accounts';
 import { scrapeStatement as doScrapeStatement } from './statements';
 
-const KEEPALIVE_URL = '/Bia.Controllers/SessionIsAlive/Check';
-// BIA platform default session timeout is ~20 min; ping every 10 min to stay safe.
+const API_BASE = '/corporate/web-api/v1';
+// eParitet session timeout is not published; ping every 10 min as a precaution.
 const KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000;
 
-export class BelvebAdapter implements BankAdapter {
-  readonly id = 'belveb';
-  readonly name = 'БелВЭБ BY';
+export class ParitetbankAdapter implements BankAdapter {
+  readonly id = 'paritetbank';
+  readonly name = 'Паритетбанк BY';
 
   private activePage: Page | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
@@ -28,9 +28,6 @@ export class BelvebAdapter implements BankAdapter {
       await this.activePage.close().catch(() => null);
     }
     this.activePage = null;
-    // Always reset the browser context before logging in.
-    // After a navigation timeout the existing context may be stuck, and creating
-    // a new page inside it would inherit the broken state.
     await resetContext(this.id);
     this.activePage = await login();
     this.startKeepAlive();
@@ -45,8 +42,8 @@ export class BelvebAdapter implements BankAdapter {
       return await doScrapeStatement(this.activePage!, req);
     } catch (err) {
       const msg = (err as Error).message ?? '';
-      if (/session.?expired|SessionTimeout/i.test(msg)) {
-        logger.warn('[belveb] Session expired during statement scrape — re-logging in for immediate retry');
+      if (/session|sign-in|unauthorized|401/i.test(msg)) {
+        logger.warn('[paritetbank] Session expired during statement scrape — re-logging in');
         await this.login();
         return doScrapeStatement(this.activePage!, req);
       }
@@ -77,15 +74,19 @@ export class BelvebAdapter implements BankAdapter {
       return;
     }
     try {
-      const ok = await this.activePage.evaluate(async (url: string) => {
+      const ok = await this.activePage.evaluate(async (apiBase: string) => {
         try {
-          const res = await fetch(url, { credentials: 'same-origin' });
+          const res = await fetch(`${apiBase}/info/getSettings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+          });
           return res.ok;
         } catch { return false; }
-      }, KEEPALIVE_URL);
-      logger.debug('[belveb] Session keepalive', { ok });
+      }, API_BASE);
+      logger.debug('[paritetbank] Session keepalive', { ok });
     } catch (err) {
-      logger.debug('[belveb] Session keepalive error', { err: String(err) });
+      logger.debug('[paritetbank] Session keepalive error', { err: String(err) });
     }
   }
 }

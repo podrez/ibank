@@ -229,14 +229,16 @@
       text-transform: uppercase;
     }
 
-    .bank-alfabank  { background: #FDECEB; color: #BF1E0E; }
-    .bank-priorbank { background: #FFF9E6; color: #7A5500; }
-    .bank-belveb    { background: #E3F5F5; color: #005A6E; }
-    .bank-unknown   { background: #f3f4f6; color: #374151; }
+    .bank-alfabank     { background: #FDECEB; color: #BF1E0E; }
+    .bank-priorbank    { background: #FFF9E6; color: #7A5500; }
+    .bank-belveb       { background: #E3F5F5; color: #005A6E; }
+    .bank-paritetbank  { background: #EEF0FA; color: #23358C; }
+    .bank-unknown      { background: #f3f4f6; color: #374151; }
 
-    .bank-card-alfabank  { border-top: 3px solid #EF3124; }
-    .bank-card-priorbank { border-top: 3px solid #FFD100; }
-    .bank-card-belveb    { border-top: 3px solid #007A8A; }
+    .bank-card-alfabank     { border-top: 3px solid #EF3124; }
+    .bank-card-priorbank    { border-top: 3px solid #FFD100; }
+    .bank-card-belveb       { border-top: 3px solid #007A8A; }
+    .bank-card-paritetbank  { border-top: 3px solid #23358C; }
 
     .currency-tag {
       font-size: 0.75rem;
@@ -1143,14 +1145,15 @@
   }
 
   function bankLabel(bank) {
-    return { alfabank: 'Альфа-Банк', priorbank: 'Приорбанк', belveb: 'БелВЭБ' }[bank] ?? bank;
+    return { alfabank: 'Альфа-Банк', priorbank: 'Приорбанк', belveb: 'БелВЭБ', paritetbank: 'Паритетбанк' }[bank] ?? bank;
   }
 
   function bankIcon(bank) {
     const favicons = {
-      alfabank:  'https://online.alfabank.by/favicon.ico',
-      priorbank: 'https://www.priorbank.by/favicon.ico',
-      belveb:    'https://dbo2.bveb.by/favicon.ico',
+      alfabank:     'https://online.alfabank.by/favicon.ico',
+      priorbank:    'https://www.priorbank.by/favicon.ico',
+      belveb:       'https://dbo2.bveb.by/favicon.ico',
+      paritetbank:  'https://eparitet.by/favicons/favicon-32x32.png',
     };
     const src = favicons[bank];
     if (!src) return '';

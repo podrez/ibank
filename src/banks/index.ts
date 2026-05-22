@@ -2,6 +2,7 @@ import { BankAdapter } from './types';
 import { AlfabankAdapter } from './alfabank';
 import { PriorbankAdapter } from './priorbank';
 import { BelvebAdapter } from './belveb';
+import { ParitetbankAdapter } from './paritetbank';
 
 // Singleton instances — adapters hold the active Playwright page, so recreating
 // them on every sync cycle leaks browser tabs (each login() opens ctx.newPage()
@@ -31,6 +32,11 @@ export function getEnabledBanks(): BankAdapter[] {
   const belvebLogin = process.env.BELVEB_LOGIN;
   if (belvebLogin) {
     banks.push(new BelvebAdapter());
+  }
+
+  const paritetbankLogin = process.env.PARITETBANK_LOGIN;
+  if (paritetbankLogin) {
+    banks.push(new ParitetbankAdapter());
   }
 
   _banks = banks;
