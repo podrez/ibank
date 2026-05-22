@@ -2,7 +2,7 @@
 
 Headless browser service that logs into multiple Belarusian banks, scrapes account balances every 5 minutes on weekdays (09:00–17:00 Minsk time), persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
-**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`)
+**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`)
 
 ## Tech stack
 
@@ -53,7 +53,7 @@ A built-in dashboard is served at `http://localhost:3000/`.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
 - **Visibility toggle** — the "Настроить" button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
-- **Statement viewer** — accounts listed in `ALFABANK_STATEMENT_ACCOUNTS` / `PRIORBANK_STATEMENT_ACCOUNTS` show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
+- **Statement viewer** — accounts listed in `ALFABANK_STATEMENT_ACCOUNTS` / `PRIORBANK_STATEMENT_ACCOUNTS` / `BELVEB_STATEMENT_ACCOUNTS` show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
@@ -67,6 +67,8 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `ALFABANK_PASSWORD` | — | Alfa-Bank BY password |
 | `PRIORBANK_LOGIN` | — | Priorbank BY login (leave empty to disable) |
 | `PRIORBANK_PASSWORD` | — | Priorbank BY password |
+| `BELVEB_LOGIN` | — | БелВЭБ BY login (leave empty to disable) |
+| `BELVEB_PASSWORD` | — | БелВЭБ BY password |
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
 | `API_PORT` | `3000` | HTTP port for the REST API |
 | `API_KEY` | — | Secret key to protect the API |
@@ -76,6 +78,7 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `EXTRA_WORKING_DAYS` | — | Comma-separated dates (`YYYY-MM-DD`) that are working days despite falling on Sat/Sun (e.g. `2026-04-25,2026-11-07`) |
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
 | `PRIORBANK_STATEMENT_ACCOUNTS` | — | Same for Priorbank |
+| `BELVEB_STATEMENT_ACCOUNTS` | — | Same for БелВЭБ |
 | `ONEC_WEBHOOK_URL` | — | 1C webhook URL to notify on new transactions (leave empty to disable) |
 | `ONEC_USERNAME` | — | Basic auth username for 1C |
 | `ONEC_PASSWORD` | — | Basic auth password for 1C |
@@ -168,9 +171,10 @@ If a bank's scraper fails to find account cards via DOM scraping:
 2. Trigger a sync and inspect the saved files:
    - `./data/debug/alfabank-dashboard.html` / `alfabank-dashboard.png`
    - `./data/debug/priorbank-dashboard.html` / `priorbank-dashboard.png`
-3. Update CSS selectors in `domScrape()` inside the relevant `src/banks/<bank>/accounts.ts`
+   - `./data/debug/belveb-dashboard.html` / `belveb-dashboard.png`
+3. Update CSS selectors in the relevant `src/banks/<bank>/accounts.ts`
 
-For statement scraping failures, the debug files are named `<bank>-statement-<account>.html/.png`.
+For statement scraping failures, the debug files are saved to `./data/debug/` with the bank name prefix (e.g. `belveb-stmt-<account>-<step>.html`).
 
 ## 1C notifications
 

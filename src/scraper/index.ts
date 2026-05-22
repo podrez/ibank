@@ -47,7 +47,18 @@ export async function syncBankBalances(bank: BankAdapter): Promise<SyncResult> {
       await bank.login();
     }
 
-    const accounts = await bank.scrapeAccounts();
+    let accounts: ScrapedAccount[];
+    try {
+      accounts = await bank.scrapeAccounts();
+    } catch (scrapeErr) {
+      if (needsRelogin(scrapeErr)) {
+        logger.warn('Session expired mid-scrape — re-logging in and retrying', { bank: bank.id });
+        await bank.login();
+        accounts = await bank.scrapeAccounts();
+      } else {
+        throw scrapeErr;
+      }
+    }
 
     if (accounts.length === 0) {
       throw new Error('No accounts found after scraping');
@@ -150,7 +161,18 @@ export async function syncBankStatement(
       await bank.login();
     }
 
-    const transactions = await bank.scrapeStatement(req);
+    let transactions: ScrapedTransaction[];
+    try {
+      transactions = await bank.scrapeStatement(req);
+    } catch (scrapeErr) {
+      if (needsRelogin(scrapeErr)) {
+        logger.warn('Session expired mid-scrape — re-logging in and retrying', { bank: bank.id });
+        await bank.login();
+        transactions = await bank.scrapeStatement(req);
+      } else {
+        throw scrapeErr;
+      }
+    }
     logger.info('Statement scraped', { bank: bank.id, account: req.accountNumber, count: transactions.length });
 
     const { imported, skipped } = await persistTransactions(bank.id, req.accountNumber, transactions);
@@ -267,6 +289,15 @@ async function resolveFromDate(bankId: string, accountNumber: string): Promise<s
   const fallback = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   logger.debug('resolveFromDate: no history, falling back', { bank: bankId, accountNumber, fallback });
   return fallback;
+}
+
+// ── Session-expiry / browser-stuck detection ──────────────────────────────────
+
+function needsRelogin(err: unknown): boolean {
+  const msg = (err as Error)?.message ?? '';
+  // Session expired (redirect to login) OR Playwright navigation/page timeout
+  return /session.?expired|SessionTimeout/i.test(msg) ||
+         /Timeout \d+ms exceeded|Navigation timeout|net::ERR_/i.test(msg);
 }
 
 // ── Account persistence ───────────────────────────────────────────────────────
