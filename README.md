@@ -1,6 +1,6 @@
 # Account Balances Service
 
-Headless browser service that logs into multiple Belarusian banks, scrapes account balances every 5 minutes on weekdays (09:00–17:00 Minsk time), persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
+Headless browser service that logs into multiple Belarusian banks, scrapes account balances on a schedule, persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
 **Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY (`eparitet.by`)
 
@@ -49,7 +49,7 @@ The service is available at `http://localhost:3000`.
 A built-in dashboard is served at `http://localhost:3000/`.
 
 - **Login screen** — enter the `API_KEY` value; the key is stored in `sessionStorage` for the browser session.
-- **Account cards** — show bank name, account number, currency, current balance, and the time the balance was last scraped.
+- **Account cards** — show bank name, account number, currency, current balance, the time the balance was last scraped, and today's credit/debit totals.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
 - **Visibility toggle** — the "Настроить" button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
@@ -75,8 +75,9 @@ A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
 | `API_PORT` | `3000` | HTTP port for the REST API |
 | `API_KEY` | — | Secret key to protect the API |
-| `SCHEDULE_START_HOUR` | `9` | Scraping window start hour (Minsk time) |
-| `SCHEDULE_END_HOUR` | `17` | Scraping window end hour (Minsk time) |
+| `APP_TIMEZONE` | `Europe/Minsk` | IANA timezone used for scheduling, today-totals calculations, and browser locale |
+| `SCHEDULE_START_HOUR` | `9` | Scraping window start hour (APP_TIMEZONE) |
+| `SCHEDULE_END_HOUR` | `17` | Scraping window end hour (APP_TIMEZONE) |
 | `SCHEDULE_INTERVAL_MINUTES` | `5` | Interval between scrapes (minutes) |
 | `EXTRA_WORKING_DAYS` | — | Comma-separated dates (`YYYY-MM-DD`) that are working days despite falling on Sat/Sun (e.g. `2026-04-25,2026-11-07`) |
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
@@ -112,6 +113,7 @@ All endpoints (except `/health`) require authentication via one of:
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
+| GET | `/api/today-totals` | Today's credit/debit totals per account (grouped by bank, account, currency) |
 | GET | `/api/statement-accounts` | List of accounts configured for statement syncing (from env vars) |
 | GET | `/health` | Health check (no auth required) |
 
@@ -136,6 +138,17 @@ All endpoints (except `/health`) require authentication via one of:
 }
 ```
 
+### Example: GET /api/today-totals
+
+```json
+{
+  "totals": [
+    { "bank": "alfabank", "accountNumber": "BY12ALFA...", "currency": "BYN", "totalCredit": 500.00, "totalDebit": 120.50 }
+  ],
+  "date": "2026-05-22"
+}
+```
+
 ## Architecture
 
 ```
@@ -154,7 +167,7 @@ Scheduler (node-cron)
 Each bank adapter uses the strategy best suited to that bank's web application:
 
 - **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback
-- **БелВЭБ** — Kendo Grid DOM scraping via BIA platform portlets, with direct AJAX portlet fetch as fallback
+- **БелВЭБ** — direct AJAX portlet fetch (`/Vpsk/List`), with Kendo Grid DOM scraping as fallback
 - **Паритетбанк** — direct REST API calls (`/corporate/web-api/v1/`) via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
 
 Statement scraping stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
@@ -186,7 +199,7 @@ Update the relevant `src/banks/<bank>/accounts.ts` or `statements.ts` based on w
 
 ## 1C notifications
 
-When `ONEC_WEBHOOK_URL` is set, the service sends a `POST` request to that URL after each statement sync that imports at least one new transaction.
+When `ONEC_WEBHOOK_URL` is set, the service sends a `POST` request to that URL after each statement sync that imports at least one new transaction. Failed requests are retried up to 3 times with exponential backoff (500 ms, 1 s, 2 s); only 5xx responses and network errors trigger a retry — 4xx responses are surfaced immediately as warnings.
 
 **Request headers:**
 ```

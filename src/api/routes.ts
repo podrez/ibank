@@ -1,10 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db, schema } from '../db';
-import { desc, eq, and, gte, lte, sql } from 'drizzle-orm';
+import { desc, eq, and, gte, lte, sql, count } from 'drizzle-orm';
 import { runSync } from '../scheduler';
 import { getEnabledBanks } from '../banks';
 import { syncBankStatement, syncAllStatements } from '../scraper';
 import { logger } from '../logger';
+import { isoToday } from '../utils/dates';
 
 export const router = Router();
 
@@ -58,7 +59,7 @@ router.get('/status', async (_req, res) => {
     const lastSync = await db.query.syncLog.findFirst({
       orderBy: [desc(schema.syncLog.startedAt)],
     });
-    const accountCount = await db.query.accounts.findMany().then((r) => r.length);
+    const [{ value: accountCount }] = await db.select({ value: count() }).from(schema.accounts);
 
     res.json({
       status: 'ok',
@@ -165,7 +166,7 @@ router.post('/statements/refresh', async (req, res) => {
     syncBankStatement(bank, {
       accountNumber: account,
       dateFrom: dateFrom ?? firstDayOfMonth(),
-      dateTo: dateTo ?? today(),
+      dateTo: dateTo ?? isoToday(),
     }).catch((err) => logger.error('Statement refresh error', { error: err.message }));
 
     res.json({ message: 'Statement refresh started', bank: bankId, account });
@@ -184,7 +185,7 @@ router.post('/statements/refresh', async (req, res) => {
  */
 router.get('/today-totals', async (_req, res) => {
   try {
-    const todayMinsk = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+    const todayMinsk = new Intl.DateTimeFormat('sv', { timeZone: process.env.APP_TIMEZONE ?? 'Europe/Minsk' }).format(new Date());
 
     const rows = await db
       .select({
@@ -231,10 +232,6 @@ router.get('/statement-accounts', (_req, res) => {
 
   res.json({ accounts });
 });
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function firstDayOfMonth(): string {
   const d = new Date();

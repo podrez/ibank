@@ -3,6 +3,8 @@ import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
 import path from 'path';
+import { makeSnapper } from '../../utils/debug';
+import { strPick, numPick } from '../../utils/scrape';
 
 const BASE_URL = 'https://online.alfabank.by';
 const DASHBOARD_URL = `${BASE_URL}/Cabinet/Dashboard/`;
@@ -26,22 +28,10 @@ export async function scrapeStatement(
     to: req.dateTo,
   });
 
-  const saveSnap = async (name: string) => {
-    if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-    try {
-      if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
-      const safe = req.accountNumber.replace(/[^A-Z0-9]/gi, '_');
-      const file = `alfabank-stmt-${safe}-${name}`;
-      await page.screenshot({ path: path.join(DEBUG_DIR, `${file}.png`), fullPage: true }).catch(() => null);
-      fs.writeFileSync(path.join(DEBUG_DIR, `${file}.html`), await page.content().catch(() => ''));
-      logger.info(`[alfabank:statement] Snapshot saved: ./data/debug/${file}.png`);
-    } catch { /* ignore */ }
-  };
+  const saveSnap = makeSnapper(page, 'alfabank', req.accountNumber);
 
-  // Step 1: navigate to the Выписки section
-  logger.info('[alfabank:statement] Step 1: Navigating to Выписки section');
+  logger.debug('[alfabank:statement] Navigating to Выписки section');
   const landed = await navigateToStatements(page);
-  logger.info('[alfabank:statement] Step 1 result', { landed });
   await saveSnap('01-statements-page');
 
   if (!landed) {
@@ -49,28 +39,22 @@ export async function scrapeStatement(
     return [];
   }
 
-  // Step 2: click "Изменить" to open the request form
-  logger.info('[alfabank:statement] Step 2: Clicking Изменить to open request form');
+  logger.debug('[alfabank:statement] Clicking Изменить to open request form');
   await clickIzmenit(page);
   await page.waitForTimeout(1_000);
   await saveSnap('02-after-izmenit');
 
-  // Step 3: select the account
-  logger.info('[alfabank:statement] Step 3: Selecting account', { account: req.accountNumber });
-  const accountSelected = await selectAccount(page, req.accountNumber);
-  logger.info('[alfabank:statement] Step 3 result', { accountSelected });
+  logger.debug('[alfabank:statement] Selecting account', { account: req.accountNumber });
+  await selectAccount(page, req.accountNumber);
   await page.waitForTimeout(1_000);
   await saveSnap('03-account-selected');
 
-  // Step 4: fill date range
-  logger.info('[alfabank:statement] Step 4: Filling date range', { from: req.dateFrom, to: req.dateTo });
+  logger.debug('[alfabank:statement] Filling date range', { from: req.dateFrom, to: req.dateTo });
   await fillDateRange(page, req.dateFrom, req.dateTo);
   await saveSnap('04-dates-filled');
 
-  // Step 5: submit and intercept API response or fall back to DOM
-  logger.info('[alfabank:statement] Step 5: Submitting and waiting for data');
+  logger.debug('[alfabank:statement] Submitting and waiting for data');
   const transactions = await submitAndCollect(page, req);
-  logger.info('[alfabank:statement] Step 5 result', { count: transactions.length });
   await saveSnap('05-after-submit');
 
   return transactions;
@@ -87,16 +71,16 @@ async function navigateToStatements(page: Page): Promise<boolean> {
     await page.waitForTimeout(1_500);
     const current = page.url();
     if (current.includes('/Statements')) {
-      logger.info('[alfabank:statement] Reached Выписки via direct URL', { url: current });
+      logger.debug('[alfabank:statement] Reached Выписки via direct URL', { url: current });
       return true;
     }
-    logger.info('[alfabank:statement] Direct URL redirected away', { from: STATEMENTS_URL, to: current });
+    logger.debug('[alfabank:statement] Direct URL redirected away', { from: STATEMENTS_URL, to: current });
   } catch (err) {
     logger.warn('[alfabank:statement] Direct navigation failed', { error: (err as Error).message });
   }
 
   // Fall back: click the nav link from the dashboard
-  logger.info('[alfabank:statement] Falling back to menu click');
+  logger.debug('[alfabank:statement] Falling back to menu click');
   if (!page.url().includes('/Cabinet/')) {
     try {
       await page.goto(DASHBOARD_URL, { waitUntil: 'networkidle', timeout: 20_000 });
@@ -109,13 +93,13 @@ async function navigateToStatements(page: Page): Promise<boolean> {
 
   const link = page.locator(`a[href="/Cabinet/Statements/"]`).first();
   if (await link.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    logger.info('[alfabank:statement] Clicking nav link /Cabinet/Statements/');
+    logger.debug('[alfabank:statement] Clicking nav link /Cabinet/Statements/');
     await link.click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1_000);
     const current = page.url();
     if (current.includes('/Statements')) {
-      logger.info('[alfabank:statement] Reached Выписки via menu click', { url: current });
+      logger.debug('[alfabank:statement] Reached Выписки via menu click', { url: current });
       return true;
     }
     logger.warn('[alfabank:statement] Click did not navigate to Statements', { url: current });
@@ -137,7 +121,7 @@ async function clickIzmenit(page: Page): Promise<void> {
   for (const sel of selectors) {
     const btn = page.locator(sel).first();
     if (await btn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      logger.info(`[alfabank:statement] Clicking Изменить (${sel})`);
+      logger.debug(`[alfabank:statement] Clicking Изменить (${sel})`);
       await btn.click();
       await page.waitForLoadState('networkidle').catch(() => null);
       return;
@@ -161,7 +145,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
   }, accountNumber);
 
   if (ok) {
-    logger.info(`[alfabank:statement] Account set via Kendo MultiSelect API: ${accountNumber}`);
+    logger.debug(`[alfabank:statement] Account set via Kendo MultiSelect API: ${accountNumber}`);
     await page.waitForTimeout(300);
     return true;
   }
@@ -183,7 +167,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
     .isVisible({ timeout: 500 })
     .catch(() => false);
   if (alreadySelected) {
-    logger.info(`[alfabank:statement] Account already selected: ${accountNumber}`);
+    logger.debug(`[alfabank:statement] Account already selected: ${accountNumber}`);
     return true;
   }
 
@@ -193,7 +177,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
   const opt = page.locator(`#SelectedAccountNumbers_listbox [acc="${accountNumber}"]`).first();
   if (await opt.isVisible({ timeout: 2_000 }).catch(() => false)) {
     await opt.click();
-    logger.info(`[alfabank:statement] Account selected via dropdown click: ${accountNumber}`);
+    logger.debug(`[alfabank:statement] Account selected via dropdown click: ${accountNumber}`);
     return true;
   }
 
@@ -205,7 +189,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
 
 async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Promise<void> {
   // Select "Период" from the dropdown — UI click is the primary approach
-  logger.info('[alfabank:statement] Selecting "Период" from Period dropdown');
+  logger.debug('[alfabank:statement] Selecting "Период" from Period dropdown');
   await selectPeriodViaClick(page);
 
   // Wait for IsPeriodSelectionVisible binding to show the date inputs
@@ -214,11 +198,11 @@ async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Prom
     .waitFor({ state: 'visible', timeout: 5_000 })
     .then(() => true)
     .catch(() => false);
-  logger.info(`[alfabank:statement] DateFrom input visible after Period selection: ${dateFromVisible}`);
+  logger.debug(`[alfabank:statement] DateFrom input visible after Period selection: ${dateFromVisible}`);
 
   if (!dateFromVisible) {
     // Fallback: try Kendo JS API
-    logger.info('[alfabank:statement] UI click did not reveal date inputs, trying Kendo JS API');
+    logger.debug('[alfabank:statement] UI click did not reveal date inputs, trying Kendo JS API');
     await page.evaluate(function() {
       var $ = (window as any).jQuery;
       if (!$) return;
@@ -250,7 +234,7 @@ async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Prom
     wTo.trigger('change');
     return true;
   }, { fy: +fy, fm: +fm, fd: +fd, ty: +ty, tm: +tm, td: +td });
-  logger.info(`[alfabank:statement] Dates set via Kendo API: ${datesSet}`);
+  logger.debug(`[alfabank:statement] Dates set via Kendo API: ${datesSet}`);
 
   if (!datesSet) {
     // Fallback: type digits into the masked inputs
@@ -260,7 +244,7 @@ async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Prom
 
   const fromVal = await page.locator('input[name="DateFrom"]').inputValue().catch(() => '?');
   const toVal   = await page.locator('input[name="DateTo"]').inputValue().catch(() => '?');
-  logger.info(`[alfabank:statement] Date inputs after fill: DateFrom="${fromVal}", DateTo="${toVal}"`);
+  logger.debug(`[alfabank:statement] Date inputs after fill: DateFrom="${fromVal}", DateTo="${toVal}"`);
 }
 
 async function selectPeriodViaClick(page: Page): Promise<void> {
@@ -281,7 +265,7 @@ async function selectPeriodViaClick(page: Page): Promise<void> {
     }
     return 'no-vm';
   });
-  logger.info(`[alfabank:statement] Period set via ko.dataFor: ${koSet}`);
+  logger.debug(`[alfabank:statement] Period set via ko.dataFor: ${koSet}`);
   if (koSet === 'ok') return;
 
   // Strategy 2: jQuery DDL .select() + DOM change event for Knockout
@@ -296,7 +280,7 @@ async function selectPeriodViaClick(page: Page): Promise<void> {
     if (el) el.dispatchEvent(new Event('change', { bubbles: true }));
     return 'ok';
   });
-  logger.info(`[alfabank:statement] Period set via jQuery DDL: ${jqSet}`);
+  logger.debug(`[alfabank:statement] Period set via jQuery DDL: ${jqSet}`);
 }
 
 async function fillMaskedDate(page: Page, selector: string, isoDate: string, label: string): Promise<void> {
@@ -307,7 +291,7 @@ async function fillMaskedDate(page: Page, selector: string, isoDate: string, lab
   }
   const [yyyy, mm, dd] = isoDate.split('-');
   const digits = `${dd}${mm}${yyyy}`;
-  logger.info(`[alfabank:statement] ${label}: "${isoDate}" → digits "${digits}"`);
+  logger.debug(`[alfabank:statement] ${label}: "${isoDate}" → digits "${digits}"`);
   await el.click();
   await page.waitForTimeout(100);
   await page.keyboard.press('Home');
@@ -317,7 +301,7 @@ async function fillMaskedDate(page: Page, selector: string, isoDate: string, lab
     await page.waitForTimeout(40);
   }
   const val = await el.inputValue().catch(() => '?');
-  logger.info(`[alfabank:statement] ${label} value after fill: "${val}"`);
+  logger.debug(`[alfabank:statement] ${label} value after fill: "${val}"`);
 }
 
 // ── Step 5: Submit and collect transactions ───────────────────────────────────
@@ -384,7 +368,7 @@ async function clickSubmitButton(page: Page): Promise<void> {
   const btn = page.locator('.actions button[type="submit"]').first();
   if (await btn.isVisible({ timeout: 3_000 }).catch(() => false)) {
     const text = await btn.innerText().catch(() => 'submit');
-    logger.info(`[alfabank:statement] Clicking submit: "${text.trim()}"`);
+    logger.debug(`[alfabank:statement] Clicking submit: "${text.trim()}"`);
     await btn.click();
     return;
   }
@@ -392,7 +376,7 @@ async function clickSubmitButton(page: Page): Promise<void> {
   for (const sel of ['button:has-text("Применить")', 'button[type="submit"]']) {
     const fb = page.locator(sel).first();
     if (await fb.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      logger.info(`[alfabank:statement] Clicking submit (fallback): ${sel}`);
+      logger.debug(`[alfabank:statement] Clicking submit (fallback): ${sel}`);
       await fb.click();
       return;
     }
@@ -433,32 +417,32 @@ function parseApiResponse(json: unknown): ScrapedTransaction[] | null {
 }
 
 function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
-  const transactionDate = parseDate(str(a, [
+  const transactionDate = parseDate(strPick(a, [
     'transactionDate', 'TransactionDate', 'date', 'Date',
     'operationDate', 'OperationDate', 'valueDate', 'ValueDate',
     'created_at', 'createdAt',
   ]));
   if (!transactionDate) return null;
 
-  const currency = str(a, [
+  const currency = strPick(a, [
     'currency', 'Currency', 'currencyCode', 'CurrencyCode', 'iso', 'Iso',
   ]);
   if (!currency) return null;
 
-  const description = str(a, [
+  const description = strPick(a, [
     'description', 'Description', 'purpose', 'Purpose',
     'details', 'Details', 'narrative', 'Narrative',
     'comment', 'Comment', 'memo', 'Memo',
     'operationName', 'OperationName', 'name', 'Name',
   ]);
 
-  const reference = str(a, [
+  const reference = strPick(a, [
     'reference', 'Reference', 'documentNumber', 'DocumentNumber',
     'docNumber', 'DocNumber', 'id', 'Id',
     'operationId', 'OperationId', 'transactionId', 'TransactionId',
   ]) || undefined;
 
-  const counterpartyUnp = str(a, [
+  const counterpartyUnp = strPick(a, [
     'unp', 'Unp', 'UNP',
     'counterpartyUnp', 'CounterpartyUnp',
     'taxpayerId', 'TaxpayerId',
@@ -466,7 +450,7 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
     'inn', 'Inn',
   ]) || undefined;
 
-  const counterpartyName = str(a, [
+  const counterpartyName = strPick(a, [
     'correspondentName', 'CorrespondentName',
     'counterpartyName', 'CounterpartyName',
     'beneficiaryName', 'BeneficiaryName',
@@ -475,9 +459,9 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
     'contractor', 'Contractor',
   ]) || undefined;
 
-  const amount = num(a, ['amount', 'Amount', 'sum', 'Sum']);
-  const debitRaw  = numOrNull(a, ['debit', 'Debit', 'debitAmount', 'DebitAmount', 'expense', 'Expense']);
-  const creditRaw = numOrNull(a, ['credit', 'Credit', 'creditAmount', 'CreditAmount', 'income', 'Income']);
+  const amount = numPick(a, ['amount', 'Amount', 'sum', 'Sum']);
+  const debitRaw  = numPick(a, ['debit', 'Debit', 'debitAmount', 'DebitAmount', 'expense', 'Expense']);
+  const creditRaw = numPick(a, ['credit', 'Credit', 'creditAmount', 'CreditAmount', 'income', 'Income']);
 
   let debit: number | undefined;
   let credit: number | undefined;
@@ -487,7 +471,7 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
   } else if (creditRaw !== null && creditRaw !== 0) {
     credit = Math.abs(creditRaw);
   } else if (amount !== null) {
-    const typeStr = str(a, ['type', 'Type', 'direction', 'Direction', 'operationType', 'OperationType']);
+    const typeStr = strPick(a, ['type', 'Type', 'direction', 'Direction', 'operationType', 'OperationType']);
     const isDebit = amount < 0 || /debit|expense|out|расход|дебет/i.test(typeStr);
     if (isDebit) { debit = Math.abs(amount); } else { credit = Math.abs(amount); }
   }
@@ -604,19 +588,3 @@ function parseDate(raw: string): string | null {
   return null;
 }
 
-function str(obj: Record<string, unknown>, keys: string[]): string {
-  for (const k of keys) if (obj[k] != null) return String(obj[k]);
-  return '';
-}
-
-function num(obj: Record<string, unknown>, keys: string[]): number | null {
-  for (const k of keys) {
-    const v = parseFloat(String(obj[k] ?? ''));
-    if (!isNaN(v)) return v;
-  }
-  return null;
-}
-
-function numOrNull(obj: Record<string, unknown>, keys: string[]): number | null {
-  return num(obj, keys);
-}

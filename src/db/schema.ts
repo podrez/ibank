@@ -22,7 +22,7 @@ export const accounts = sqliteTable(
 
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  bank: text('bank').notNull().default('alfabank'),
+  bank: text('bank').notNull(),
   status: text('status').notNull(),
   message: text('message'),
   accountsFound: integer('accounts_found'),

@@ -5,7 +5,7 @@ let browser: Browser | null = null;
 const contexts = new Map<string, BrowserContext>();
 let launchPromise: Promise<Browser> | null = null;
 
-const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT_MS ?? '30000');
+const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT_MS ?? '') || 30_000;
 const HEADLESS = process.env.HEADLESS !== 'false';
 
 async function ensureBrowser(): Promise<Browser> {
@@ -52,7 +52,7 @@ export async function getBrowserContext(bankId: string): Promise<BrowserContext>
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'ru-RU',
-      timezoneId: 'Europe/Minsk',
+      timezoneId: process.env.APP_TIMEZONE ?? 'Europe/Minsk',
     });
     ctx.setDefaultTimeout(TIMEOUT);
     contexts.set(bankId, ctx);

@@ -1,8 +1,7 @@
 import { Page, Locator } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
-import path from 'path';
-import fs from 'fs';
+import { saveDebugSnapshot } from '../../utils/debug';
 
 const BANK_ID = 'alfabank';
 const BASE_URL = 'https://online.alfabank.by';
@@ -51,7 +50,7 @@ export async function login(): Promise<Page> {
   }
 
   try {
-    logger.info('[alfabank] Navigating to Alfa-Bank');
+    logger.debug('[alfabank] Navigating to Alfa-Bank');
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     await saveDebugSnapshot(page, 'alfabank-01-login-page');
@@ -65,7 +64,7 @@ export async function login(): Promise<Page> {
       return page;
     }
 
-    logger.info('[alfabank] Filling username');
+    logger.debug('[alfabank] Filling username');
     const usernameInput = await waitForInput(page, [
       'input[name="UserName"]',
       'input[autocomplete="username"]',
@@ -74,7 +73,7 @@ export async function login(): Promise<Page> {
     await usernameInput.click();
     await usernameInput.fill(bankLogin);
 
-    logger.info('[alfabank] Filling password');
+    logger.debug('[alfabank] Filling password');
     const passwordInput = await waitForInput(page, [
       'input[name="Password"]',
       'input[type="password"]',
@@ -84,12 +83,12 @@ export async function login(): Promise<Page> {
 
     await saveDebugSnapshot(page, 'alfabank-02-fields-filled');
 
-    logger.info('[alfabank] Clicking submit');
+    logger.debug('[alfabank] Clicking submit');
     await clickSubmit(page);
 
     await saveDebugSnapshot(page, 'alfabank-03-after-submit');
 
-    logger.info('[alfabank] Waiting for dashboard...');
+    logger.debug('[alfabank] Waiting for dashboard...');
     await page.waitForFunction(
       () => (document as Document).querySelector('input[name="Password"]') === null,
       { timeout: 30_000, polling: 500 },
@@ -150,9 +149,3 @@ async function clickSubmit(page: Page): Promise<void> {
   await page.locator('input[name="Password"], input[type="password"]').first().press('Enter');
 }
 
-async function saveDebugSnapshot(page: Page, name: string): Promise<void> {
-  if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-  const dir = './data/debug';
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true }).catch(() => null);
-}

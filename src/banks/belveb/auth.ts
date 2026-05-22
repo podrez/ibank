@@ -1,8 +1,7 @@
 import { Page, Locator } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
-import path from 'path';
-import fs from 'fs';
+import { saveDebugSnapshot } from '../../utils/debug';
 
 const BANK_ID = 'belveb';
 const BASE_URL = 'https://dbo2.bveb.by';
@@ -43,7 +42,7 @@ export async function login(): Promise<Page> {
   try {
     // Navigate to main page — if session cookie is still valid the bank
     // will redirect straight to /Cabinet/.
-    logger.info('[belveb] Navigating to main page');
+    logger.debug('[belveb] Navigating to main page');
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.waitForTimeout(2_000);
     await saveDebugSnapshot(page, 'belveb-01-initial');
@@ -55,7 +54,7 @@ export async function login(): Promise<Page> {
 
     // The login form is loaded via AJAX into #fmLogin only after the user
     // clicks the "Войти" link (carousel slide 1). Click it first.
-    logger.info('[belveb] Clicking "Войти" to open login slide');
+    logger.debug('[belveb] Clicking "Войти" to open login slide');
     const loginSlideLink = await findLoginSlideLink(page);
     if (loginSlideLink) {
       await loginSlideLink.click();
@@ -70,7 +69,7 @@ export async function login(): Promise<Page> {
     }
 
     // Wait for the login form portlet to load inside #fmLogin
-    logger.info('[belveb] Waiting for login form to load in #fmLogin...');
+    logger.debug('[belveb] Waiting for login form to load in #fmLogin...');
     await page.waitForFunction(
       () => {
         const fmLogin = document.querySelector('#fmLogin');
@@ -82,7 +81,7 @@ export async function login(): Promise<Page> {
 
     // The login portlet has two tabs: "Вход по паролю" and "Вход по ЭЦП".
     // Make sure we are on the password tab before filling credentials.
-    logger.info('[belveb] Switching to "Вход по паролю" tab');
+    logger.debug('[belveb] Switching to "Вход по паролю" tab');
     const passwordTabCandidates = [
       '#fmLogin a:has-text("Вход по паролю")',
       '#fmLogin a:has-text("по паролю")',
@@ -105,7 +104,7 @@ export async function login(): Promise<Page> {
     }
     await saveDebugSnapshot(page, 'belveb-02-form-loaded');
 
-    logger.info('[belveb] Filling username');
+    logger.debug('[belveb] Filling username');
     const loginInput = await waitForInputInContainer(page, '#fmLogin', [
       'input[name="UserName"]',
       'input[name="username"]',
@@ -119,7 +118,7 @@ export async function login(): Promise<Page> {
     await loginInput.click();
     await loginInput.fill(bankLogin);
 
-    logger.info('[belveb] Filling password');
+    logger.debug('[belveb] Filling password');
     const passwordInput = await waitForInputInContainer(page, '#fmLogin', [
       'input[name="Password"]',
       'input[name="password"]',
@@ -131,12 +130,12 @@ export async function login(): Promise<Page> {
 
     await saveDebugSnapshot(page, 'belveb-03-fields-filled');
 
-    logger.info('[belveb] Clicking submit');
+    logger.debug('[belveb] Clicking submit');
     await clickSubmit(page);
 
     await saveDebugSnapshot(page, 'belveb-04-after-submit');
 
-    logger.info('[belveb] Waiting for cabinet...');
+    logger.debug('[belveb] Waiting for cabinet...');
     await page.waitForURL(`**${CABINET_URL_PATTERN}**`, { timeout: 30_000 });
 
     await page.waitForLoadState('networkidle').catch(() => null);
@@ -237,12 +236,3 @@ async function clickSubmit(page: Page): Promise<void> {
   await page.locator('#fmLogin input[type="password"], input[type="password"]').first().press('Enter');
 }
 
-async function saveDebugSnapshot(page: Page, name: string): Promise<void> {
-  if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-  const dir = './data/debug';
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true }).catch(() => null);
-  await page.content().then((html) =>
-    fs.writeFileSync(path.join(dir, `${name}.html`), html),
-  ).catch(() => null);
-}

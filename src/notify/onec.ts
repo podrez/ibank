@@ -1,5 +1,33 @@
 import { logger } from '../logger';
 
+const MAX_ATTEMPTS = 3;
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      // Retry on server errors; surface 4xx immediately (auth/config issue, not transient)
+      if (res.status >= 500 && attempt < MAX_ATTEMPTS) {
+        logger.debug(`1C webhook attempt ${attempt} got ${res.status}, retrying`);
+        await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_ATTEMPTS) {
+        logger.debug(`1C webhook attempt ${attempt} network error, retrying`, { error: (err as Error).message });
+        await new Promise((r) => setTimeout(r, 500 * 2 ** (attempt - 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Notify 1C that new statement transactions were imported for an account.
  * Configured via ONEC_WEBHOOK_URL, ONEC_USERNAME, ONEC_PASSWORD, ONEC_API_KEY.
@@ -24,7 +52,7 @@ export async function notifyStatementChanged(bank: string, accountNumber: string
   }
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers,
       body: JSON.stringify({ bank, account: accountNumber }),

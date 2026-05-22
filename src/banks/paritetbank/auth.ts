@@ -1,8 +1,7 @@
 import { Page } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
-import path from 'path';
-import fs from 'fs';
+import { saveDebugSnapshot } from '../../utils/debug';
 
 const BANK_ID = 'paritetbank';
 const BASE_URL = 'https://eparitet.by';
@@ -31,7 +30,7 @@ export async function login(): Promise<Page> {
   const page = await ctx.newPage();
 
   try {
-    logger.info('[paritetbank] Navigating to main page');
+    logger.debug('[paritetbank] Navigating to main page');
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
     // Vue SPA needs time to hydrate and run the router guard
@@ -44,29 +43,29 @@ export async function login(): Promise<Page> {
     }
 
     // Wait for the login form to render inside the Vue app
-    logger.info('[paritetbank] Waiting for login form...');
+    logger.debug('[paritetbank] Waiting for login form...');
     await page.waitForSelector('input[autocomplete="login"], .login input[type="text"]', {
       timeout: 20_000,
     });
     await saveDebugSnapshot(page, 'paritetbank-02-form');
 
-    logger.info('[paritetbank] Filling login');
+    logger.debug('[paritetbank] Filling login');
     const loginInput = page.locator('input[autocomplete="login"]').first();
     await loginInput.click();
     await loginInput.fill(bankLogin);
 
-    logger.info('[paritetbank] Filling password');
+    logger.debug('[paritetbank] Filling password');
     const passwordInput = page.locator('input[type="password"]').first();
     await passwordInput.click();
     await passwordInput.fill(bankPassword);
 
     await saveDebugSnapshot(page, 'paritetbank-03-filled');
 
-    logger.info('[paritetbank] Submitting');
+    logger.debug('[paritetbank] Submitting login form');
     await page.locator('button[type="submit"]').first().click();
 
     // Wait for Vue Router to navigate away from /sign-in
-    logger.info('[paritetbank] Waiting for post-login navigation...');
+    logger.debug('[paritetbank] Waiting for post-login navigation...');
     await page.waitForFunction(
       () => !window.location.href.includes('/sign-in'),
       { timeout: 30_000, polling: 500 },
@@ -122,12 +121,3 @@ async function handleOrgSelection(page: Page): Promise<void> {
   logger.info('[paritetbank] Organisation selected', { url: page.url() });
 }
 
-async function saveDebugSnapshot(page: Page, name: string): Promise<void> {
-  if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-  const dir = './data/debug';
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true }).catch(() => null);
-  await page.content().then((html) =>
-    fs.writeFileSync(path.join(dir, `${name}.html`), html),
-  ).catch(() => null);
-}

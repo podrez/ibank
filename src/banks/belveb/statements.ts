@@ -3,12 +3,12 @@ import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import { db, schema } from '../../db';
 import { and, eq } from 'drizzle-orm';
-import fs from 'fs';
-import path from 'path';
+import { parseDate, isoToDMY } from '../../utils/dates';
+import { makeSnapper } from '../../utils/debug';
+import { strPick, numPick } from '../../utils/scrape';
 
 const BASE_URL = 'https://dbo2.bveb.by';
 const VPSK_BASE = '/Cabinet/Accounts/Vpsk/Extract/';
-const DEBUG_DIR = './data/debug';
 
 const CURRENCY_CODES: Record<string, string> = {
   BYN: '933', USD: '840', EUR: '978', RUB: '643', CNY: '156',
@@ -22,12 +22,12 @@ export async function scrapeStatement(
     account: req.accountNumber, from: req.dateFrom, to: req.dateTo,
   });
 
-  const snap = makeSnapper(page, req.accountNumber);
+  const snap = makeSnapper(page, 'belveb', req.accountNumber);
 
-  // 1. Build URL with numeric currency code from DB
-  const currencyCode = await lookupCurrencyCode(req.accountNumber);
+  // 1. Build URL with numeric currency code from DB; also keep ISO code for transactions
+  const { isoCode: accountCurrency, numericCode: currencyCode } = await lookupCurrencyInfo(req.accountNumber);
   const vpskUrl = buildVpskUrl(req.accountNumber, currencyCode);
-  logger.info('[belveb:stmt] Navigating to Vpsk Extract', { url: vpskUrl });
+  logger.debug('[belveb:stmt] Navigating to Vpsk Extract', { url: vpskUrl });
 
   await page.goto(vpskUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.waitForTimeout(1_500);
@@ -39,7 +39,7 @@ export async function scrapeStatement(
   }
 
   // 2. Wait for the Vpsk portlet form to finish loading
-  logger.info('[belveb:stmt] Waiting for Vpsk portlet form...');
+  logger.debug('[belveb:stmt] Waiting for Vpsk portlet form...');
   await page.waitForFunction(
     () => {
       const prtl = document.querySelector('#prtl0, [data-portlet-order="0"]');
@@ -52,14 +52,14 @@ export async function scrapeStatement(
   await snap('02-portlet-loaded');
 
   // 3. Fill date range using Kendo JS API (most reliable on BIA platform)
-  logger.info('[belveb:stmt] Filling date range', { from: req.dateFrom, to: req.dateTo });
+  logger.debug('[belveb:stmt] Filling date range', { from: req.dateFrom, to: req.dateTo });
   await fillDatesViaKendo(page, req.dateFrom, req.dateTo);
   await page.waitForTimeout(400);
   await snap('03-dates-filled');
 
   // 4. Submit and wait for AJAX response.
   // BIA platform sends results to SubmitUrl=/Vpsk/List and updates #vpsk-list-result.
-  logger.info('[belveb:stmt] Submitting form and waiting for AJAX response...');
+  logger.debug('[belveb:stmt] Submitting form and waiting for AJAX response...');
   let ajaxResponseHtml = '';
   try {
     const [response] = await Promise.all([
@@ -70,7 +70,7 @@ export async function scrapeStatement(
       clickSubmit(page),
     ]);
     ajaxResponseHtml = await response.text();
-    logger.info('[belveb:stmt] AJAX response received', { bytes: ajaxResponseHtml.length, url: response.url() });
+    logger.debug('[belveb:stmt] AJAX response received', { bytes: ajaxResponseHtml.length, url: response.url() });
   } catch (err) {
     logger.warn('[belveb:stmt] waitForResponse timed out, falling back to DOM', { err: String(err) });
     await clickSubmit(page);
@@ -85,7 +85,7 @@ export async function scrapeStatement(
   let transactions: ScrapedTransaction[] = [];
 
   if (ajaxResponseHtml.length > 100) {
-    transactions = extractFromHtml(ajaxResponseHtml, req);
+    transactions = extractFromHtml(ajaxResponseHtml, req, accountCurrency);
     if (transactions.length > 0) {
       logger.info('[belveb:stmt] Extracted from AJAX response HTML', { count: transactions.length });
       return transactions;
@@ -93,7 +93,7 @@ export async function scrapeStatement(
     logger.debug('[belveb:stmt] AJAX HTML yielded 0 transactions, trying page DOM');
   }
 
-  transactions = await extractFromPageDom(page, req);
+  transactions = await extractFromPageDom(page, req, accountCurrency);
   logger.info('[belveb:stmt] Extraction result', { count: transactions.length });
 
   if (transactions.length === 0) {
@@ -117,17 +117,17 @@ export async function scrapeStatement(
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 
-async function lookupCurrencyCode(accountNumber: string): Promise<string> {
+async function lookupCurrencyInfo(accountNumber: string): Promise<{ isoCode: string; numericCode: string }> {
   try {
     const row = await db
       .select({ currency: schema.accounts.currency })
       .from(schema.accounts)
       .where(and(eq(schema.accounts.bank, 'belveb'), eq(schema.accounts.accountNumber, accountNumber)))
       .limit(1);
-    const iso = row[0]?.currency ?? 'BYN';
-    return CURRENCY_CODES[iso] ?? '933';
+    const isoCode = row[0]?.currency ?? 'BYN';
+    return { isoCode, numericCode: CURRENCY_CODES[isoCode] ?? '933' };
   } catch {
-    return '933';
+    return { isoCode: 'BYN', numericCode: '933' };
   }
 }
 
@@ -241,16 +241,16 @@ async function clickSubmit(page: Page): Promise<void> {
 // ── Transaction extraction ────────────────────────────────────────────────────
 
 /** Parse transactions from arbitrary HTML (either AJAX response fragment or full page) */
-function extractFromHtml(html: string, req: StatementRequest): ScrapedTransaction[] {
+function extractFromHtml(html: string, req: StatementRequest, accountCurrency: string): ScrapedTransaction[] {
   // Try JS Model embedded in a <script> IIFE
-  const modelTx = extractModelFromScripts(html, req.accountNumber);
+  const modelTx = extractModelFromScripts(html, accountCurrency);
   if (modelTx.length > 0) return modelTx;
 
   // Try Kendo Grid HTML table rows using fixed column positions
-  return extractRowsFromHtml(html);
+  return extractRowsFromHtml(html, accountCurrency);
 }
 
-function extractModelFromScripts(html: string, _account: string): ScrapedTransaction[] {
+function extractModelFromScripts(html: string, accountCurrency: string): ScrapedTransaction[] {
   // BIA pattern: (function(name, settings){require([name],fn);})('"module.name"', {Model:[...]});
   const scriptRe = /<script[^>]*>([\s\S]*?)<\/script>/gi;
   let m: RegExpExecArray | null;
@@ -268,7 +268,7 @@ function extractModelFromScripts(html: string, _account: string): ScrapedTransac
       const data = JSON.parse(cleaned) as { Model?: unknown[] };
       if (!Array.isArray(data?.Model) || data.Model.length === 0) continue;
       const results = data.Model
-        .map((item) => parseApiItem(item as Record<string, unknown>))
+        .map((item) => parseApiItem(item as Record<string, unknown>, accountCurrency))
         .filter((t): t is ScrapedTransaction => t !== null);
       if (results.length > 0) return results;
     } catch { continue; }
@@ -276,7 +276,7 @@ function extractModelFromScripts(html: string, _account: string): ScrapedTransac
   return [];
 }
 
-function extractRowsFromHtml(html: string): ScrapedTransaction[] {
+function extractRowsFromHtml(html: string, accountCurrency: string): ScrapedTransaction[] {
   // Column layout from Vpsk/List response — see extractKendoGridFromPage for details
   const results: ScrapedTransaction[] = [];
   const rowRe = /<tr[^>]+data-uid[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -309,7 +309,7 @@ function extractRowsFromHtml(html: string): ScrapedTransaction[] {
       description: cells[6].trim() || '—',
       debit: parseAmt(cells[9]),
       credit: parseAmt(cells[10]),
-      currency: 'BYN',
+      currency: accountCurrency,
       counterpartyUnp: cells[4].trim() || undefined,
       counterpartyName: cells[3].trim() || undefined,
     });
@@ -317,16 +317,16 @@ function extractRowsFromHtml(html: string): ScrapedTransaction[] {
   return results;
 }
 
-async function extractFromPageDom(page: Page, req: StatementRequest): Promise<ScrapedTransaction[]> {
+async function extractFromPageDom(page: Page, req: StatementRequest, accountCurrency: string): Promise<ScrapedTransaction[]> {
   // Strategy 1: JS Model in page scripts
-  const modelTx = await extractJsModelFromPage(page);
+  const modelTx = await extractJsModelFromPage(page, accountCurrency);
   if (modelTx.length > 0) {
     logger.info('[belveb:stmt] Extracted from page JS Model', { count: modelTx.length });
     return modelTx;
   }
 
   // Strategy 2: Kendo Grid rows in DOM (fixed column positions)
-  const gridTx = await extractKendoGridFromPage(page, req.accountNumber);
+  const gridTx = await extractKendoGridFromPage(page, accountCurrency);
   if (gridTx.length > 0) {
     logger.info('[belveb:stmt] Extracted from page Kendo Grid', { count: gridTx.length });
     return gridTx;
@@ -335,7 +335,7 @@ async function extractFromPageDom(page: Page, req: StatementRequest): Promise<Sc
   return [];
 }
 
-async function extractJsModelFromPage(page: Page): Promise<ScrapedTransaction[]> {
+async function extractJsModelFromPage(page: Page, accountCurrency: string): Promise<ScrapedTransaction[]> {
   // All logic inlined to avoid named inner functions (esbuild adds __name() for named fns,
   // which is undefined in the browser context of page.evaluate)
   try {
@@ -358,14 +358,14 @@ async function extractJsModelFromPage(page: Page): Promise<ScrapedTransaction[]>
     const data = JSON.parse(raw) as { Model?: unknown[] };
     if (!Array.isArray(data?.Model)) return [];
     return data.Model
-      .map((item) => parseApiItem(item as Record<string, unknown>))
+      .map((item) => parseApiItem(item as Record<string, unknown>, accountCurrency))
       .filter((t): t is ScrapedTransaction => t !== null);
   } catch {
     return [];
   }
 }
 
-async function extractKendoGridFromPage(page: Page, _account: string): Promise<ScrapedTransaction[]> {
+async function extractKendoGridFromPage(page: Page, accountCurrency: string): Promise<ScrapedTransaction[]> {
   // Column layout confirmed from thead data-field attributes in Vpsk/List response:
   //  0: DocumentAcceptDate — Дата операции
   //  1: OperationCode      — Код операции
@@ -414,7 +414,7 @@ async function extractKendoGridFromPage(page: Page, _account: string): Promise<S
         description: cells[6].trim() || '—',
         debit: parseAmt(cells[9]),
         credit: parseAmt(cells[10]),
-        currency: 'BYN',
+        currency: accountCurrency,
         counterpartyUnp: cells[4].trim() || undefined,
         counterpartyName: cells[3].trim() || undefined,
       });
@@ -427,7 +427,7 @@ async function extractKendoGridFromPage(page: Page, _account: string): Promise<S
 
 // ── Node.js-side transaction item parser ─────────────────────────────────────
 
-function parseApiItem(t: Record<string, unknown>): ScrapedTransaction | null {
+function parseApiItem(t: Record<string, unknown>, accountCurrency: string): ScrapedTransaction | null {
   const rawDate = strPick(t, [
     'DocumentAcceptDate', 'DocDate', 'docDate', 'TransactionDate', 'transactionDate',
     'OperationDate', 'operationDate', 'Date', 'date', 'ValueDate', 'valueDate', 'PostingDate',
@@ -454,55 +454,9 @@ function parseApiItem(t: Record<string, unknown>): ScrapedTransaction | null {
     description: strPick(t, ['DestinationPayment', 'PaymentPurpose', 'paymentPurpose', 'Purpose', 'purpose', 'Description', 'description', 'Narrative', 'narrative', 'Details', 'details', 'Comment', 'comment']) || '—',
     debit,
     credit,
-    currency: strPick(t, ['CurrencyText', 'currencyText', 'Currency', 'currency', 'Ccy', 'ccy']) || 'BYN',
+    currency: strPick(t, ['CurrencyText', 'currencyText', 'Currency', 'currency', 'Ccy', 'ccy']) || accountCurrency,
     counterpartyUnp: strPick(t, ['Unp', 'unp', 'CounterpartyUnp', 'counterpartyUnp', 'PayerUnp', 'payerUnp']) || undefined,
     counterpartyName: strPick(t, ['CorrespondentName', 'CounterpartyName', 'counterpartyName', 'Contractor', 'contractor', 'PayerName', 'payerName', 'PayeeName', 'payeeName']) || undefined,
   };
 }
 
-// ── Tiny helpers ──────────────────────────────────────────────────────────────
-
-function isoToDMY(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
-
-function parseDate(raw: string): string | null {
-  if (!raw) return null;
-  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (iso) return iso[1];
-  const dmy = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-  if (/^\d{10,13}$/.test(raw)) {
-    const d = new Date(Number(raw));
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  }
-  return null;
-}
-
-function strPick(obj: Record<string, unknown>, keys: string[]): string {
-  for (const k of keys) if (obj[k] != null) return String(obj[k]);
-  return '';
-}
-
-function numPick(obj: Record<string, unknown>, keys: string[]): number | null {
-  for (const k of keys) {
-    const v = parseFloat(String(obj[k] ?? ''));
-    if (!isNaN(v)) return v;
-  }
-  return null;
-}
-
-function makeSnapper(page: Page, accountNumber: string) {
-  return async (label: string): Promise<void> => {
-    if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-    try {
-      if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
-      const safe = accountNumber.replace(/[^A-Z0-9]/gi, '_');
-      const file = `belveb-stmt-${safe}-${label}`;
-      await page.screenshot({ path: path.join(DEBUG_DIR, `${file}.png`), fullPage: true }).catch(() => null);
-      fs.writeFileSync(path.join(DEBUG_DIR, `${file}.html`), await page.content().catch(() => ''));
-      logger.info(`[belveb:stmt] Snapshot: ./data/debug/${file}.png`);
-    } catch { /* ignore */ }
-  };
-}

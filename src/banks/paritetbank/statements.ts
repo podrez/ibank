@@ -2,6 +2,8 @@ import { Page } from 'playwright';
 import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
+import { parseDate, isoToDMY } from '../../utils/dates';
+import { makeSnapper } from '../../utils/debug';
 
 const API_BASE = '/corporate/web-api/v1';
 const DEBUG_DIR = './data/debug';
@@ -34,14 +36,14 @@ export async function scrapeStatement(
     account: req.accountNumber, from: req.dateFrom, to: req.dateTo,
   });
 
-  const snap = makeSnapper(page, req.accountNumber);
+  const snap = makeSnapper(page, 'paritetbank', req.accountNumber);
 
   // 1. Resolve internal account ID from account number
   const accountId = await resolveAccountId(page, req.accountNumber);
-  logger.info('[paritetbank:stmt] Resolved account id', { accountId });
+  logger.debug('[paritetbank:stmt] Resolved account id', { accountId });
 
   // 2. Fetch transaction history
-  logger.info('[paritetbank:stmt] Fetching transaction history');
+  logger.debug('[paritetbank:stmt] Fetching transaction history');
   const historyData = await page.evaluate(
     async (params: { apiBase: string; id: number | string; dateFrom: string; dateTo: string }) => {
       try {
@@ -151,37 +153,4 @@ function parseTransaction(t: RawTransaction): ScrapedTransaction | null {
   };
 }
 
-function isoToDMY(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}.${m}.${y}`;
-}
 
-function parseDate(raw: string): string | null {
-  if (!raw) return null;
-  // ISO yyyy-MM-dd
-  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (iso) return iso[1];
-  // DD.MM.YYYY
-  const dmy = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-  // Unix timestamp (ms or s)
-  if (/^\d{10,13}$/.test(raw)) {
-    const ts = Number(raw);
-    const d = new Date(ts > 9999999999 ? ts : ts * 1000);
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  }
-  return null;
-}
-
-function makeSnapper(page: Page, accountNumber: string) {
-  return async (label: string): Promise<void> => {
-    if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-    try {
-      if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
-      const safe = accountNumber.replace(/[^A-Z0-9]/gi, '_');
-      const file = `paritetbank-stmt-${safe}-${label}`;
-      await page.screenshot({ path: `${DEBUG_DIR}/${file}.png`, fullPage: true }).catch(() => null);
-      fs.writeFileSync(`${DEBUG_DIR}/${file}.html`, await page.content().catch(() => ''));
-    } catch { /* ignore */ }
-  };
-}

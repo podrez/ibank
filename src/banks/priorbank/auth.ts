@@ -1,8 +1,7 @@
 import { Page, Locator } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
-import path from 'path';
-import fs from 'fs';
+import { saveDebugSnapshot } from '../../utils/debug';
 
 const BANK_ID = 'priorbank';
 const BASE_URL = 'https://www.ibank.priorbank.by';
@@ -73,7 +72,7 @@ export async function login(): Promise<Page> {
   try {
     // First try the cabinet URL directly — if the session cookie is valid the bank
     // will serve the cabinet without a redirect through the login page.
-    logger.info('[priorbank] Checking for active session on cabinet URL');
+    logger.debug('[priorbank] Checking for active session on cabinet URL');
     await page.goto(`${BASE_URL}/v1/cabinet/`, { waitUntil: 'domcontentloaded', timeout: 20_000 }).catch(() => null);
     await page.waitForTimeout(1_500);
     await dismissKendoOverlay(page);
@@ -84,13 +83,13 @@ export async function login(): Promise<Page> {
     }
 
     // Session not active — navigate to the login page
-    logger.info('[priorbank] No active session, navigating to login page');
+    logger.debug('[priorbank] No active session, navigating to login page');
     await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30_000 }).catch(() =>
       page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 }),
     );
     await page.waitForTimeout(2_000);
     await saveDebugSnapshot(page, 'priorbank-01-login-page');
-    logger.info('[priorbank] Landed on', { url: page.url() });
+    logger.debug('[priorbank] Landed on', { url: page.url() });
 
     // Dismiss any blocking overlay before interacting with the page
     await dismissKendoOverlay(page);
@@ -99,7 +98,7 @@ export async function login(): Promise<Page> {
     // Dismiss cookie consent banner if present
     await dismissCookieBanner(page);
 
-    logger.info('[priorbank] Filling login');
+    logger.debug('[priorbank] Filling login');
     const loginInput = await waitForInput(page, [
       'input[name="UserName"]',
       'input[name="username"]',
@@ -114,7 +113,7 @@ export async function login(): Promise<Page> {
     await loginInput.click();
     await loginInput.fill(bankLogin);
 
-    logger.info('[priorbank] Filling password');
+    logger.debug('[priorbank] Filling password');
     const passwordInput = await waitForInput(page, [
       'input[name="password"]',
       'input[name="Password"]',
@@ -126,12 +125,12 @@ export async function login(): Promise<Page> {
 
     await saveDebugSnapshot(page, 'priorbank-02-fields-filled');
 
-    logger.info('[priorbank] Clicking submit');
+    logger.debug('[priorbank] Clicking submit');
     await clickSubmit(page);
 
     await saveDebugSnapshot(page, 'priorbank-03-after-submit');
 
-    logger.info('[priorbank] Waiting for dashboard...');
+    logger.debug('[priorbank] Waiting for dashboard...');
     // Wait for login form to disappear
     await page.waitForFunction(
       () => {
@@ -293,12 +292,3 @@ async function dismissCookieBanner(page: Page): Promise<void> {
   }
 }
 
-async function saveDebugSnapshot(page: Page, name: string): Promise<void> {
-  if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-  const dir = './data/debug';
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true }).catch(() => null);
-  await page.content().then((html) =>
-    fs.writeFileSync(path.join(dir, `${name}.html`), html),
-  ).catch(() => null);
-}

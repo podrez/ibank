@@ -2,12 +2,10 @@
 import { ScrapedTransaction, StatementRequest } from '../types';
 import { dismissKendoOverlay } from './auth';
 import { logger } from '../../logger';
-import fs from 'fs';
-import path from 'path';
+import { makeSnapper } from '../../utils/debug';
 
 const BASE_URL = 'https://www.ibank.priorbank.by';
 const STATEMENT_URL = `${BASE_URL}/v1/Cabinet/101`;
-const DEBUG_DIR = './data/debug';
 
 export async function scrapeStatement(
   page: Page,
@@ -19,20 +17,10 @@ export async function scrapeStatement(
     to: req.dateTo,
   });
 
-  const saveSnap = async (name: string) => {
-    if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
-    try {
-      if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
-      const safe = req.accountNumber.replace(/[^A-Z0-9]/gi, '_');
-      const file = `priorbank-stmt-${safe}-${name}`;
-      await page.screenshot({ path: path.join(DEBUG_DIR, `${file}.png`), fullPage: true }).catch(() => null);
-      fs.writeFileSync(path.join(DEBUG_DIR, `${file}.html`), await page.content().catch(() => ''));
-      logger.info(`[priorbank:statement] Snapshot saved: ./data/debug/${file}.png`);
-    } catch { /* ignore */ }
-  };
+  const saveSnap = makeSnapper(page, 'priorbank', req.accountNumber);
 
   // Step 1: Navigate to statement page
-  logger.info('[priorbank:statement] Step 1: Navigating to statement page', { url: STATEMENT_URL });
+  logger.debug('[priorbank:statement] Step 1: Navigating to statement page', { url: STATEMENT_URL });
   try {
     await page.goto(STATEMENT_URL, { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForTimeout(2_000);
@@ -43,7 +31,7 @@ export async function scrapeStatement(
   }
 
   const urlAfterNav = page.url();
-  logger.info('[priorbank:statement] Step 1 result: current URL', { url: urlAfterNav });
+  logger.debug('[priorbank:statement] Step 1 result: current URL', { url: urlAfterNav });
 
   if (urlAfterNav.includes('login') || urlAfterNav.includes('Login')) {
     logger.error('[priorbank:statement] Redirected to login — session expired');
@@ -55,27 +43,27 @@ export async function scrapeStatement(
   await saveSnap('01-statement-page-loaded');
 
   // Step 2: Select account from Kendo dropdown
-  logger.info('[priorbank:statement] Step 2: Looking for account selector');
+  logger.debug('[priorbank:statement] Step 2: Looking for account selector');
   const accountSelected = await selectAccount(page, req.accountNumber);
-  logger.info('[priorbank:statement] Step 2 result: account selected', { success: accountSelected });
+  logger.debug('[priorbank:statement] Step 2 result: account selected', { success: accountSelected });
   await page.waitForTimeout(1_500);
   await saveSnap('02-account-selected');
 
   // Step 3: Fill date range
-  logger.info('[priorbank:statement] Step 3: Filling date range', { from: req.dateFrom, to: req.dateTo });
+  logger.debug('[priorbank:statement] Step 3: Filling date range', { from: req.dateFrom, to: req.dateTo });
   const datesSet = await fillDateRange(page, req.dateFrom, req.dateTo);
-  logger.info('[priorbank:statement] Step 3 result: dates filled', { success: datesSet });
+  logger.debug('[priorbank:statement] Step 3 result: dates filled', { success: datesSet });
   await saveSnap('03-dates-filled');
 
   // Step 4: Submit — Priorbank returns server-rendered HTML (no JSON API)
-  logger.info('[priorbank:statement] Step 4: Clicking submit and waiting for page reload');
+  logger.debug('[priorbank:statement] Step 4: Clicking submit and waiting for page reload');
   await clickSubmitButton(page);
   await saveSnap('04-after-submit');
 
   // Step 5: Parse Kendo Grid rows
-  logger.info('[priorbank:statement] Step 5: Parsing Kendo Grid data from DOM');
+  logger.debug('[priorbank:statement] Step 5: Parsing Kendo Grid data from DOM');
   const transactions = await domScrape(page, req);
-  logger.info('[priorbank:statement] Step 5 result', { count: transactions.length });
+  logger.debug('[priorbank:statement] Step 5 result', { count: transactions.length });
   return transactions;
 }
 
@@ -114,7 +102,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
         text.toLowerCase().includes('account') ||
         text.toLowerCase().includes('счёт')
       ) {
-        logger.info(`[priorbank:statement]   → Account dropdown found (${sel}[${i}]): "${text.slice(0, 60)}"`);
+        logger.debug(`[priorbank:statement]   → Account dropdown found (${sel}[${i}]): "${text.slice(0, 60)}"`);
         await el.click().catch(() => null);
         await page.waitForTimeout(500);
 
@@ -134,7 +122,7 @@ async function selectAccount(page: Page, accountNumber: string): Promise<boolean
         const text = await opt.innerText().catch(() => '');
         logger.debug(`[priorbank:statement]     option value="${val}" text="${text.slice(0, 60)}"`);
         if (val?.includes(accountNumber) || text.includes(accountNumber)) {
-          logger.info(`[priorbank:statement]   → Selecting option: value="${val}"`);
+          logger.debug(`[priorbank:statement]   → Selecting option: value="${val}"`);
           await selEl.selectOption({ value: val! });
           return true;
         }
@@ -153,7 +141,7 @@ async function clickKendoOption(page: Page, accountNumber: string): Promise<bool
     const text = await item.innerText().catch(() => '');
     logger.debug(`[priorbank:statement]     option: "${text.slice(0, 80)}"`);
     if (text.includes(accountNumber)) {
-      logger.info(`[priorbank:statement]   → Clicking Kendo option: "${text.slice(0, 60)}"`);
+      logger.debug(`[priorbank:statement]   → Clicking Kendo option: "${text.slice(0, 60)}"`);
       await item.click();
       return true;
     }
@@ -184,7 +172,7 @@ async function fillKendoDate(
   label: string,
 ): Promise<void> {
   const digits = isoToMaskDigits(isoDate);
-  logger.info(`[priorbank:statement]   Filling ${label}: "${isoDate}" → digits "${digits}"`);
+  logger.debug(`[priorbank:statement]   Filling ${label}: "${isoDate}" → digits "${digits}"`);
 
   await locator.click();
   await page.waitForTimeout(100);
@@ -198,7 +186,7 @@ async function fillKendoDate(
 
   await page.waitForTimeout(200);
   const val = await locator.inputValue().catch(() => '?');
-  logger.info(`[priorbank:statement]   ${label} value after fill: "${val}"`);
+  logger.debug(`[priorbank:statement]   ${label} value after fill: "${val}"`);
 }
 
 async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Promise<boolean> {
@@ -207,7 +195,7 @@ async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Prom
   if (await periodRadio.isVisible({ timeout: 1_000 }).catch(() => false)) {
     const checked = await periodRadio.isChecked().catch(() => false);
     if (!checked) {
-      logger.info('[priorbank:statement]   Selecting "за период" radio button');
+      logger.debug('[priorbank:statement]   Selecting "за период" radio button');
       await periodRadio.click();
       await page.waitForTimeout(300);
     } else {
@@ -224,7 +212,7 @@ async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Prom
   const fromVisible = await fromEl.isVisible({ timeout: 2_000 }).catch(() => false);
   const toVisible   = await toEl.isVisible({ timeout: 2_000 }).catch(() => false);
 
-  logger.info('[priorbank:statement]   Date fields visible', { fromVisible, toVisible });
+  logger.debug('[priorbank:statement]   Date fields visible', { fromVisible, toVisible });
 
   if (fromVisible) {
     await fillKendoDate(page, fromEl, dateFrom, 'DateFrom');
@@ -267,7 +255,7 @@ async function clickSubmitButton(page: Page): Promise<void> {
     const btn = page.locator(sel).first();
     if (await btn.isVisible({ timeout: 800 }).catch(() => false)) {
       const text = await btn.innerText().catch(() => sel);
-      logger.info(`[priorbank:statement]   → Clicking submit: "${text.slice(0, 40)}" (${sel})`);
+      logger.debug(`[priorbank:statement]   → Clicking submit: "${text.slice(0, 40)}" (${sel})`);
       await btn.click();
       // Wait for Kendo Grid data rows — not networkidle, which would block on
       // third-party fraud-detection calls (fp-back.facct.by) for ~27 seconds.

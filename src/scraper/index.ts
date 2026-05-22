@@ -1,9 +1,10 @@
 import { getEnabledBanks, BankAdapter, ScrapedAccount, ScrapedTransaction, StatementRequest } from '../banks';
 import { db, schema } from '../db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { logger } from '../logger';
 import crypto from 'crypto';
 import { notifyStatementChanged } from '../notify/onec';
+import { isoToday } from '../utils/dates';
 
 export interface SyncResult {
   bank: string;
@@ -195,42 +196,31 @@ async function persistTransactions(
   accountNumber: string,
   scraped: ScrapedTransaction[],
 ): Promise<{ imported: number; skipped: number }> {
-  let imported = 0;
-  let skipped = 0;
+  if (scraped.length === 0) return { imported: 0, skipped: 0 };
 
-  for (const tx of scraped) {
-    const txKey = computeTxKey(tx);
+  const rows = scraped.map((tx) => ({
+    bank: bankId,
+    accountNumber,
+    transactionDate: tx.transactionDate,
+    reference: tx.reference ?? null,
+    description: tx.description,
+    debit: tx.debit ?? null,
+    credit: tx.credit ?? null,
+    currency: tx.currency,
+    counterpartyUnp: tx.counterpartyUnp ?? null,
+    counterpartyName: tx.counterpartyName ?? null,
+    txKey: computeTxKey(tx),
+  }));
 
-    const existing = await db.query.transactions.findFirst({
-      where: and(
-        eq(schema.transactions.bank, bankId),
-        eq(schema.transactions.accountNumber, accountNumber),
-        eq(schema.transactions.transactionDate, tx.transactionDate),
-        eq(schema.transactions.txKey, txKey),
-      ),
-    });
+  // Single INSERT OR IGNORE — unique index on (bank, accountNumber, transactionDate, txKey)
+  const inserted = await db
+    .insert(schema.transactions)
+    .values(rows)
+    .onConflictDoNothing()
+    .returning({ id: schema.transactions.id });
 
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    await db.insert(schema.transactions).values({
-      bank: bankId,
-      accountNumber,
-      transactionDate: tx.transactionDate,
-      reference: tx.reference ?? null,
-      description: tx.description,
-      debit: tx.debit ?? null,
-      credit: tx.credit ?? null,
-      currency: tx.currency,
-      counterpartyUnp: tx.counterpartyUnp ?? null,
-      counterpartyName: tx.counterpartyName ?? null,
-      txKey,
-    });
-    imported++;
-  }
-
+  const imported = inserted.length;
+  const skipped = rows.length - imported;
   return { imported, skipped };
 }
 
@@ -254,11 +244,6 @@ function getStatementAccounts(bankId: string): string[] {
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-function isoToday(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
 
 /**
  * Determine the start date for a statement sync when no explicit date is given.
@@ -285,8 +270,7 @@ async function resolveFromDate(bankId: string, accountNumber: string): Promise<s
   // No history — load last 7 days
   const d = new Date();
   d.setDate(d.getDate() - 7);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const fallback = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const fallback = d.toISOString().slice(0, 10);
   logger.debug('resolveFromDate: no history, falling back', { bank: bankId, accountNumber, fallback });
   return fallback;
 }
@@ -303,29 +287,26 @@ function needsRelogin(err: unknown): boolean {
 // ── Account persistence ───────────────────────────────────────────────────────
 
 async function persistAccounts(bankId: string, scraped: ScrapedAccount[]): Promise<void> {
+  if (scraped.length === 0) return;
   const now = new Date().toISOString();
 
-  for (const item of scraped) {
-    const existing = await db.query.accounts.findFirst({
-      where: and(
+  // Identify new accounts before upsert so we can log them
+  const existing = await db
+    .select({ accountNumber: schema.accounts.accountNumber })
+    .from(schema.accounts)
+    .where(
+      and(
         eq(schema.accounts.bank, bankId),
-        eq(schema.accounts.accountNumber, item.accountNumber),
+        inArray(schema.accounts.accountNumber, scraped.map((a) => a.accountNumber)),
       ),
-    });
+    );
+  const knownSet = new Set(existing.map((r) => r.accountNumber));
 
-    if (existing) {
-      await db
-        .update(schema.accounts)
-        .set({
-          currency: item.currency,
-          name: item.name || existing.name,
-          balance: item.balance,
-          available: item.available,
-          balanceUpdatedAt: now,
-        })
-        .where(eq(schema.accounts.id, existing.id));
-    } else {
-      await db.insert(schema.accounts).values({
+  // Single INSERT … ON CONFLICT DO UPDATE (upsert all accounts in one query)
+  await db
+    .insert(schema.accounts)
+    .values(
+      scraped.map((item) => ({
         bank: bankId,
         accountNumber: item.accountNumber,
         currency: item.currency,
@@ -333,7 +314,22 @@ async function persistAccounts(bankId: string, scraped: ScrapedAccount[]): Promi
         balance: item.balance,
         available: item.available,
         balanceUpdatedAt: now,
-      });
+      })),
+    )
+    .onConflictDoUpdate({
+      target: [schema.accounts.bank, schema.accounts.accountNumber],
+      set: {
+        currency: sql`excluded.currency`,
+        // Keep existing name if scraper returned empty string
+        name: sql`COALESCE(NULLIF(excluded.name, ''), ${schema.accounts.name})`,
+        balance: sql`excluded.balance`,
+        available: sql`excluded.available`,
+        balanceUpdatedAt: sql`excluded.balance_updated_at`,
+      },
+    });
+
+  for (const item of scraped) {
+    if (!knownSet.has(item.accountNumber)) {
       logger.info('New account registered', {
         bank: bankId,
         accountNumber: item.accountNumber,
