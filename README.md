@@ -103,12 +103,12 @@ All endpoints (except `/health`) require authentication via one of:
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/accounts` | All accounts with latest balances |
-| GET | `/api/accounts?bank=alfabank` | Accounts for a specific bank |
+| GET | `/api/accounts?bank=<id>` | Accounts for a specific bank (`alfabank`, `priorbank`, `belveb`, `paritetbank`) |
 | POST | `/api/refresh` | Force immediate balance sync (all banks) |
-| POST | `/api/refresh?bank=priorbank` | Force sync for a specific bank |
+| POST | `/api/refresh?bank=<id>` | Force sync for a specific bank |
 | GET | `/api/status` | Last sync info, account count, server time |
 | GET | `/api/sync-log` | Last 20 sync log entries |
-| GET | `/api/sync-log?bank=alfabank` | Sync log for a specific bank |
+| GET | `/api/sync-log?bank=<id>` | Sync log for a specific bank |
 | GET | `/api/statements` | All stored transactions |
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
