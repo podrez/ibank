@@ -138,6 +138,33 @@ All endpoints (except `/health`) require authentication via one of:
 }
 ```
 
+### Example: GET /api/statements
+
+```json
+{
+  "transactions": [
+    {
+      "id": 42,
+      "bank": "belveb",
+      "accountNumber": "BY12BVEB...",
+      "transactionDate": "2026-05-28",
+      "reference": "123456",
+      "description": "Оплата услуг",
+      "debit": 250.00,
+      "credit": null,
+      "currency": "BYN",
+      "counterpartyUnp": "100123456",
+      "counterpartyName": "ООО Пример",
+      "counterpartyAccount": "BY34PJCB...",
+      "operationCode": "17",
+      "txKey": "123456",
+      "importedAt": "2026-05-28T10:05:00.000Z"
+    }
+  ],
+  "count": 1
+}
+```
+
 ### Example: GET /api/today-totals
 
 ```json
