@@ -20,6 +20,8 @@ interface RawTransaction {
   currency?: string;
   corr_bank?: string;
   corr_unn?: string;
+  corr_account?: string;
+  operation_code?: string | number;
 }
 
 interface ParitetAccount {
@@ -150,6 +152,8 @@ function parseTransaction(t: RawTransaction): ScrapedTransaction | null {
     currency: t.currency_alt || t.currency || 'BYN',
     counterpartyName: t.corr_name || undefined,
     counterpartyUnp: t.corr_unn || undefined,
+    counterpartyAccount: t.corr_account || undefined,
+    operationCode: t.operation_code != null ? String(t.operation_code) : undefined,
   };
 }
 

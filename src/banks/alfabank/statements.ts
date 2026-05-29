@@ -476,8 +476,21 @@ function parseTxItem(a: Record<string, unknown>): ScrapedTransaction | null {
     if (isDebit) { debit = Math.abs(amount); } else { credit = Math.abs(amount); }
   }
 
+  const counterpartyAccount = strPick(a, [
+    'correspondentAccount', 'CorrespondentAccount',
+    'counterpartyAccount', 'CounterpartyAccount',
+    'beneficiaryAccount', 'BeneficiaryAccount',
+    'accountNumber', 'AccountNumber',
+  ]) || undefined;
+
+  const operationCode = strPick(a, [
+    'operationCode', 'OperationCode',
+    'opCode', 'OpCode',
+    'transactionCode', 'TransactionCode',
+  ]) || undefined;
+
   if (debit === undefined && credit === undefined) return null;
-  return { transactionDate, reference, description, debit, credit, currency, counterpartyUnp, counterpartyName };
+  return { transactionDate, reference, description, debit, credit, currency, counterpartyUnp, counterpartyName, counterpartyAccount, operationCode };
 }
 
 // ── DOM scraping fallback ─────────────────────────────────────────────────────
@@ -492,6 +505,8 @@ interface AlfaBankTurn {
   CurrencyIso: string;
   CorrespondentUnp: string;
   Person3Unp: string;
+  CorrespondentAccount?: string;
+  OperationCode?: string;
 }
 
 async function domScrape(page: Page, req: StatementRequest): Promise<ScrapedTransaction[]> {
@@ -554,13 +569,15 @@ function parseTurns(turns: AlfaBankTurn[], fallbackCurrency: string): ScrapedTra
 
     transactions.push({
       transactionDate,
-      reference:        t.DocumentNumber    || undefined,
-      description:      t.Destination       || '',
-      debit:            isCredit ? undefined : Math.abs(amount),
-      credit:           isCredit ? Math.abs(amount) : undefined,
-      currency:         t.CurrencyIso        || fallbackCurrency,
-      counterpartyUnp:  unp                  || undefined,
-      counterpartyName: t.CorrespondentName  || undefined,
+      reference:          t.DocumentNumber        || undefined,
+      description:        t.Destination           || '',
+      debit:              isCredit ? undefined : Math.abs(amount),
+      credit:             isCredit ? Math.abs(amount) : undefined,
+      currency:           t.CurrencyIso            || fallbackCurrency,
+      counterpartyUnp:    unp                      || undefined,
+      counterpartyName:   t.CorrespondentName      || undefined,
+      counterpartyAccount:t.CorrespondentAccount   || undefined,
+      operationCode:      t.OperationCode          || undefined,
     });
   }
 

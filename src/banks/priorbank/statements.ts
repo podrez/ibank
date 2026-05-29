@@ -297,23 +297,24 @@ async function domScrape(page: Page, req: StatementRequest): Promise<ScrapedTran
   // the callback is serialised and executed inside the browser.
   const rawRows = await page.evaluate(() => {
     const rows = Array.from(document.querySelectorAll('tr[data-uid]'));
-    const out: Array<{date:string;docNumber:string;description:string;currency:string;counterpartyName:string;unp:string;debit:string;credit:string}> = [];
+    const out: Array<{date:string;docNumber:string;description:string;currency:string;counterpartyName:string;unp:string;counterpartyAccount:string;debit:string;credit:string}> = [];
     rows.forEach(function(row) {
       const cells = row.querySelectorAll('td');
       if (cells.length < 13) return;
       out.push({
-        date:            (cells[0].textContent  || '').trim(),
-        docNumber:       (cells[1].textContent  || '').trim(),
-        description:     (cells[2].textContent  || '').trim(),
-        currency:        (cells[6].textContent  || '').trim(),
-        counterpartyName:(cells[8].textContent  || '').trim(),
-        unp:             (cells[9].textContent  || '').trim(),
-        debit:           (cells[11].textContent || '').trim(),
-        credit:          (cells[12].textContent || '').trim(),
+        date:               (cells[0].textContent  || '').trim(),
+        docNumber:          (cells[1].textContent  || '').trim(),
+        description:        (cells[2].textContent  || '').trim(),
+        currency:           (cells[6].textContent  || '').trim(),
+        counterpartyName:   (cells[8].textContent  || '').trim(),
+        unp:                (cells[9].textContent  || '').trim(),
+        counterpartyAccount:(cells[10].textContent || '').trim(),
+        debit:              (cells[11].textContent || '').trim(),
+        credit:             (cells[12].textContent || '').trim(),
       });
     });
     return out;
-  }) as Array<{ date: string; docNumber: string; description: string; currency: string; counterpartyName: string; unp: string; debit: string; credit: string }>;
+  }) as Array<{ date: string; docNumber: string; description: string; currency: string; counterpartyName: string; unp: string; counterpartyAccount: string; debit: string; credit: string }>;
 
   logger.info(`[priorbank:statement] DOM: found ${rawRows.length} Kendo Grid data rows`);
 
@@ -341,13 +342,14 @@ async function domScrape(page: Page, req: StatementRequest): Promise<ScrapedTran
 
     transactions.push({
       transactionDate,
-      reference:        r.docNumber          || undefined,
-      description:      r.description,
-      debit:            debit  > 0 ? debit  : undefined,
-      credit:           credit > 0 ? credit : undefined,
-      currency:         r.currency           || fallbackCurrency,
-      counterpartyUnp:  r.unp                || undefined,
-      counterpartyName: r.counterpartyName   || undefined,
+      reference:          r.docNumber             || undefined,
+      description:        r.description,
+      debit:              debit  > 0 ? debit  : undefined,
+      credit:             credit > 0 ? credit : undefined,
+      currency:           r.currency              || fallbackCurrency,
+      counterpartyUnp:    r.unp                   || undefined,
+      counterpartyName:   r.counterpartyName      || undefined,
+      counterpartyAccount:r.counterpartyAccount   || undefined,
     });
   }
 

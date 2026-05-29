@@ -56,6 +56,10 @@ export const transactions = sqliteTable(
     counterpartyUnp: text('counterparty_unp'),
     /** Name of the counterparty (organisation or person) */
     counterpartyName: text('counterparty_name'),
+    /** Bank account number (IBAN) of the counterparty */
+    counterpartyAccount: text('counterparty_account'),
+    /** Bank operation/transaction type code */
+    operationCode: text('operation_code'),
     /**
      * Deterministic dedup key: reference when available,
      * otherwise a stable string derived from date+description+amounts.

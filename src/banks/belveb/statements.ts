@@ -312,6 +312,8 @@ function extractRowsFromHtml(html: string, accountCurrency: string): ScrapedTran
       currency: accountCurrency,
       counterpartyUnp: cells[4].trim() || undefined,
       counterpartyName: cells[3].trim() || undefined,
+      counterpartyAccount: cells[5].trim() || undefined,
+      operationCode: cells[1].trim() || undefined,
     });
   }
   return results;
@@ -417,6 +419,8 @@ async function extractKendoGridFromPage(page: Page, accountCurrency: string): Pr
         currency: accountCurrency,
         counterpartyUnp: cells[4].trim() || undefined,
         counterpartyName: cells[3].trim() || undefined,
+        counterpartyAccount: cells[5].trim() || undefined,
+        operationCode: cells[1].trim() || undefined,
       });
     }
     return results;
@@ -457,6 +461,8 @@ function parseApiItem(t: Record<string, unknown>, accountCurrency: string): Scra
     currency: strPick(t, ['CurrencyText', 'currencyText', 'Currency', 'currency', 'Ccy', 'ccy']) || accountCurrency,
     counterpartyUnp: strPick(t, ['Unp', 'unp', 'CounterpartyUnp', 'counterpartyUnp', 'PayerUnp', 'payerUnp']) || undefined,
     counterpartyName: strPick(t, ['CorrespondentName', 'CounterpartyName', 'counterpartyName', 'Contractor', 'contractor', 'PayerName', 'payerName', 'PayeeName', 'payeeName']) || undefined,
+    counterpartyAccount: strPick(t, ['AccountNumber', 'accountNumber', 'CorrespondentAccount', 'correspondentAccount', 'CounterpartyAccount', 'counterpartyAccount']) || undefined,
+    operationCode: strPick(t, ['OperationCode', 'operationCode', 'OpCode', 'opCode', 'TransactionCode', 'transactionCode']) || undefined,
   };
 }
 

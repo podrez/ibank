@@ -22,6 +22,10 @@ export interface ScrapedTransaction {
   counterpartyUnp?: string;
   /** Name of the counterparty (organisation or person) */
   counterpartyName?: string;
+  /** Bank account number (IBAN) of the counterparty */
+  counterpartyAccount?: string;
+  /** Bank operation/transaction type code */
+  operationCode?: string;
 }
 
 export interface StatementRequest {

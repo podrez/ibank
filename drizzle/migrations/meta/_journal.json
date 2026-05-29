@@ -57,6 +57,13 @@
       "when": 1777270690464,
       "tag": "0007_spooky_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1780052890937,
+      "tag": "0008_parallel_eternity",
+      "breakpoints": true
     }
   ]
 }

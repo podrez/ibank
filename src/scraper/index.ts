@@ -209,6 +209,8 @@ async function persistTransactions(
     currency: tx.currency,
     counterpartyUnp: tx.counterpartyUnp ?? null,
     counterpartyName: tx.counterpartyName ?? null,
+    counterpartyAccount: tx.counterpartyAccount ?? null,
+    operationCode: tx.operationCode ?? null,
     txKey: computeTxKey(tx),
   }));
 
