@@ -7,6 +7,6 @@ export default {
   out: './drizzle/migrations',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.DB_PATH ?? './data/alfabank.db',
+    url: process.env.DB_PATH ?? './data/accounts.db',
   },
 } satisfies Config;

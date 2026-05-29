@@ -5,7 +5,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import path from 'path';
 import fs from 'fs';
 
-const dbPath = process.env.DB_PATH ?? './data/alfabank.db';
+const dbPath = process.env.DB_PATH ?? './data/accounts.db';
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });

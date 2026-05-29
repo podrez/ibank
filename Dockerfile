@@ -3,6 +3,9 @@ FROM mcr.microsoft.com/playwright:v1.49.0-jammy
 
 WORKDIR /app
 
+# Install sqlite3 CLI
+RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (layer caching)
 COPY package*.json ./
 RUN npm ci
