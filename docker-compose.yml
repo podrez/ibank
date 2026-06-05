@@ -23,7 +23,7 @@ services:
       - account-balances-data:/app/data
 
     # Run migrations then start the app
-    command: sh -c "npm run db:migrate && node dist/index.js"
+    command: sh -c "node dist/db/migrate.js && node dist/index.js"
 
     # Health check
     healthcheck:
