@@ -81,26 +81,76 @@ export async function scrapeStatement(
   await page.waitForTimeout(1_000);
   await snap('04-results');
 
-  // 5. Extract transactions: try AJAX HTML first, then page DOM
-  let transactions: ScrapedTransaction[] = [];
+  // 5. Extract all pages of transactions
+  const allTransactions: ScrapedTransaction[] = [];
 
+  // Page 1: AJAX response or DOM fallback
   if (ajaxResponseHtml.length > 100) {
-    transactions = extractFromHtml(ajaxResponseHtml, req, accountCurrency);
-    if (transactions.length > 0) {
-      logger.info('[belveb:stmt] Extracted from AJAX response HTML', { count: transactions.length });
-      return transactions;
+    const page1 = extractFromHtml(ajaxResponseHtml, req, accountCurrency);
+    if (page1.length > 0) {
+      logger.info('[belveb:stmt] Page 1: extracted from AJAX response', { count: page1.length });
+      allTransactions.push(...page1);
+    } else {
+      logger.debug('[belveb:stmt] AJAX HTML yielded 0 transactions, trying page DOM');
     }
-    logger.debug('[belveb:stmt] AJAX HTML yielded 0 transactions, trying page DOM');
   }
 
-  transactions = await extractFromPageDom(page, req, accountCurrency);
-  logger.info('[belveb:stmt] Extraction result', { count: transactions.length });
+  if (allTransactions.length === 0) {
+    const domTx = await extractFromPageDom(page, req, accountCurrency);
+    logger.info('[belveb:stmt] Page 1: extracted from DOM', { count: domTx.length });
+    allTransactions.push(...domTx);
+  }
 
-  if (transactions.length === 0) {
+  // Subsequent pages: iterate Kendo Grid pager
+  let pageNum = 1;
+  while (true) {
+    const nextBtn = await findNextPageButton(page);
+    if (!nextBtn) break;
+
+    pageNum++;
+    logger.debug(`[belveb:stmt] Fetching page ${pageNum}`);
+
+    let pageHtml = '';
+    try {
+      const [nextResponse] = await Promise.all([
+        page.waitForResponse(
+          (r) => (r.url().includes('Vpsk/List') || r.url().includes('Vpsk/Index')) && r.request().method() === 'POST',
+          { timeout: 20_000 },
+        ),
+        nextBtn.click(),
+      ]);
+      pageHtml = await nextResponse.text();
+      await page.waitForTimeout(500);
+    } catch (err) {
+      logger.warn(`[belveb:stmt] Page ${pageNum}: response timeout, trying DOM`, { err: String(err) });
+      await page.waitForLoadState('networkidle').catch(() => null);
+      await page.waitForTimeout(1_000);
+    }
+
+    let pageTx: ScrapedTransaction[] = [];
+    if (pageHtml.length > 100) {
+      pageTx = extractFromHtml(pageHtml, req, accountCurrency);
+    }
+    if (pageTx.length === 0) {
+      pageTx = await extractFromPageDom(page, req, accountCurrency);
+    }
+
+    if (pageTx.length === 0) {
+      logger.warn(`[belveb:stmt] Page ${pageNum}: 0 transactions — stopping pagination`);
+      break;
+    }
+
+    allTransactions.push(...pageTx);
+    logger.info(`[belveb:stmt] Page ${pageNum}: +${pageTx.length} (total: ${allTransactions.length})`);
+  }
+
+  if (allTransactions.length === 0) {
     logger.warn(
       '[belveb:stmt] No transactions found. ' +
       'Set DEBUG_SCREENSHOTS=true and inspect ./data/debug/ for belveb-stmt-* files.',
     );
+  } else {
+    logger.info('[belveb:stmt] All pages fetched', { total: allTransactions.length });
   }
 
   // Return to cabinet dashboard so the next balance sync finds the accounts widget.
@@ -112,7 +162,7 @@ export async function scrapeStatement(
     logger.info('[belveb:stmt] Returned to cabinet dashboard after statement scrape');
   } catch { /* non-fatal */ }
 
-  return transactions;
+  return allTransactions;
 }
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
@@ -236,6 +286,24 @@ async function clickSubmit(page: Page): Promise<void> {
   }
   logger.warn('[belveb:stmt] No submit button found — trying Enter');
   await page.keyboard.press('Enter');
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+async function findNextPageButton(page: Page): Promise<import('playwright').Locator | null> {
+  // Kendo Grid pager "next page" — has k-state-disabled on the last page
+  const selectors = [
+    '.k-pager-next:not(.k-state-disabled)',
+    'a.k-pager-nav[title*="след"]:not(.k-state-disabled)',
+    'a.k-pager-nav[title*="Следующая"]:not(.k-state-disabled)',
+  ];
+  for (const sel of selectors) {
+    const btn = page.locator(sel).first();
+    if (await btn.isVisible({ timeout: 300 }).catch(() => false)) {
+      return btn;
+    }
+  }
+  return null;
 }
 
 // ── Transaction extraction ────────────────────────────────────────────────────
