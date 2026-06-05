@@ -1,677 +1,803 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>iBank · Остатки</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><rect x='5' y='20' width='6' height='9' rx='1.5' fill='white' opacity='.6'/><rect x='13' y='14' width='6' height='15' rx='1.5' fill='white' opacity='.8'/><rect x='21' y='8' width='6' height='21' rx='1.5' fill='white'/></svg>">
+  <title>iBank · Остатки на счетах</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230c0e12'/><rect x='6' y='6' width='13' height='13' rx='3.4' fill='%232563eb'/><rect x='10.5' y='10.5' width='15' height='15' rx='4' fill='%230c0e12'/><rect x='13' y='13' width='13' height='13' rx='3.4' fill='white'/></svg>">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #f4f6f9;
-      --surface: #ffffff;
-      --border: #e3e6ec;
-      --text: #111827;
-      --text-muted: #6b7280;
-      --accent: #2563eb;
-      --accent-hover: #1d4ed8;
-      --red: #dc2626;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
-      --shadow-md: 0 4px 16px rgba(0,0,0,.1);
-      --radius: 10px;
+      --bg:        #f5f6f8;
+      --surface:   #ffffff;
+      --surface-2: #fafbfc;
+      --line:      #e6e8ec;
+      --line-soft: #eef0f3;
+      --ink:       #0c0e12;
+      --ink-2:     #3c4250;
+      --muted:     #6a7180;
+      --faint:     #9aa1ad;
+      --accent:    #2563eb;
+      --accent-ink:#1d4ed8;
+      --accent-wash:#eef3ff;
+      --pos:       #15803d;
+      --pos-wash:  #e9f6ed;
+      --neg:       #c81e1e;
+      --neg-wash:  #fcebeb;
+      --shadow:    0 1px 2px rgba(16,20,28,.04), 0 8px 24px -12px rgba(16,20,28,.10);
+      --shadow-lg: 0 24px 60px -20px rgba(16,20,28,.28);
+      --radius:    14px;
+      --radius-sm: 9px;
+      --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     }
+
+    html[data-theme="dark"] {
+      --bg:        #15181e;
+      --surface:   #1d212a;
+      --surface-2: #242a35;
+      --line:      #333a46;
+      --line-soft: #2a313c;
+      --ink:       #f0f2f6;
+      --ink-2:     #c8ced8;
+      --muted:     #949ba7;
+      --faint:     #6a7280;
+      --accent:    #5b95ff;
+      --accent-ink:#7aa8ff;
+      --accent-wash:#1d2c46;
+      --pos:       #4cce80;
+      --pos-wash:  #16311f;
+      --neg:       #f2706f;
+      --neg-wash:  #341a1c;
+      --shadow:    0 1px 2px rgba(0,0,0,.22), 0 12px 30px -16px rgba(0,0,0,.42);
+      --shadow-lg: 0 28px 64px -22px rgba(0,0,0,.55);
+    }
+
+    html, body { height: 100%; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--sans);
       background: var(--bg);
-      color: var(--text);
+      color: var(--ink);
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      font-feature-settings: 'cv05' 1, 'ss01' 1;
+      transition: background .25s ease, color .25s ease;
     }
 
-    /* ── Login ─────────────────────────────────────── */
-    #login-screen {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
+    .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; letter-spacing: -0.01em; }
+    .mono { font-family: var(--mono); }
 
-    .login-card {
-      background: var(--surface);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-md);
-      padding: 2.5rem 2.25rem;
-      width: 100%;
-      max-width: 380px;
-    }
-
-    .login-logo {
-      font-size: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -.02em;
-      margin-bottom: 0.25rem;
-    }
-
-    .login-logo span { color: var(--accent); }
-
-    .login-card > p {
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      margin-bottom: 2rem;
-    }
-
-    .field { margin-bottom: 0; }
-
-    .field label {
-      display: block;
-      font-size: 0.8125rem;
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--faint);
       font-weight: 500;
-      color: var(--text-muted);
-      margin-bottom: 0.375rem;
     }
 
-    .field input {
-      width: 100%;
-      padding: 0.625rem 0.875rem;
-      border: 1.5px solid var(--border);
-      border-radius: 7px;
-      font-size: 0.9375rem;
-      font-family: 'Courier New', monospace;
-      outline: none;
-      transition: border-color .15s;
-      color: var(--text);
-      background: var(--surface);
+    /* ── Brand mark ─────────────────────────────────── */
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      user-select: none;
     }
-
-    .field input:focus { border-color: var(--accent); }
-
-    .error-msg {
-      color: var(--red);
-      font-size: 0.8125rem;
-      margin-top: 0.5rem;
-      min-height: 1.25rem;
+    .brand-mark {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: #0c0e12;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
     }
+    .brand-mark svg { display: block; }
+    .brand-word {
+      font-size: 1.0625rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand-word b { color: var(--accent); font-weight: 700; }
 
+    /* ── Buttons ────────────────────────────────────── */
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.35rem;
-      padding: 0.625rem 1.125rem;
-      border-radius: 7px;
-      border: none;
+      gap: 0.45rem;
+      padding: 0.55rem 0.95rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
       cursor: pointer;
-      font-size: 0.9375rem;
-      font-weight: 500;
-      transition: background .15s, opacity .15s, border-color .15s;
+      font-family: var(--sans);
+      font-size: 0.875rem;
+      font-weight: 550;
+      line-height: 1;
       white-space: nowrap;
+      transition: background .15s, border-color .15s, color .15s, opacity .15s, transform .05s;
+      color: var(--ink);
     }
+    .btn:active { transform: translateY(0.5px); }
+    .btn:disabled { opacity: .5; cursor: default; pointer-events: none; }
+    .btn svg { width: 15px; height: 15px; }
 
-    .btn:disabled { opacity: .55; cursor: default; pointer-events: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-ink); }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
+    .btn-ghost { background: transparent; color: var(--ink-2); border-color: var(--line); }
+    .btn-ghost:hover { background: var(--surface-2); border-color: var(--muted); }
+
+    .btn-quiet { background: transparent; color: var(--muted); padding: 0.5rem; }
+    .btn-quiet:hover { background: var(--surface-2); color: var(--ink); }
+
+    .icon-btn {
+      width: 36px; height: 36px;
+      padding: 0;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink-2);
+      display: grid; place-items: center;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .icon-btn:hover { background: var(--surface-2); border-color: var(--muted); color: var(--ink); }
+    .icon-btn svg { width: 17px; height: 17px; }
+
+    /* spin */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning svg, svg.spinning { animation: spin .8s linear infinite; }
+
+    /* ════════════════════ LOGIN ════════════════════ */
+    #login-screen {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem;
+      background:
+        radial-gradient(120% 80% at 50% -10%, color-mix(in oklab, var(--accent) 7%, var(--bg)) 0%, var(--bg) 60%);
+    }
+    .login-card {
+      width: 100%; max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2.5rem 2.25rem 2.25rem;
+    }
+    .login-card .brand { margin-bottom: 1.75rem; }
+    .login-head { margin-bottom: 1.75rem; }
+    .login-head h1 {
+      font-size: 1.375rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.35rem;
+    }
+    .login-head p { color: var(--muted); font-size: 0.9rem; }
+
+    .field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    .field input {
       width: 100%;
-      margin-top: 1.25rem;
+      padding: 0.75rem 0.9rem;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      font-family: var(--mono);
+      letter-spacing: 0.02em;
+      outline: none;
+      background: var(--surface-2);
+      color: var(--ink);
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+    .field input::placeholder { color: var(--faint); letter-spacing: 0; font-family: var(--sans); }
+    .field input:focus {
+      border-color: var(--accent);
+      background: var(--surface);
+      box-shadow: 0 0 0 4px var(--accent-wash);
+    }
+    .error-msg {
+      color: var(--neg);
+      font-size: 0.8125rem;
+      margin-top: 0.6rem;
+      min-height: 1.1rem;
+    }
+    .login-card .btn-primary { width: 100%; margin-top: 1.5rem; padding: 0.8rem; font-size: 0.95rem; }
+    .login-foot {
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--line-soft);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.78rem; color: var(--faint);
     }
 
-    .btn-primary:hover { background: var(--accent-hover); }
-
-    /* ── Dashboard ─────────────────────────────────── */
+    /* ════════════════════ DASHBOARD ═════════════════ */
     #dashboard { display: none; }
 
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 1.75rem;
-      height: 58px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+    header.topbar {
+      background: color-mix(in oklab, var(--surface) 80%, transparent);
+      backdrop-filter: saturate(160%) blur(12px);
+      -webkit-backdrop-filter: saturate(160%) blur(12px);
+      border-bottom: 1px solid var(--line);
+      padding: 0 clamp(1rem, 3vw, 2.25rem);
+      height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem;
+      position: sticky; top: 0; z-index: 20;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+    .topbar-sep { width: 1px; height: 22px; background: var(--line); flex-shrink: 0; }
+    .topbar-sub {
+      font-size: 0.9rem; color: var(--muted); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-size: 0.8rem; color: var(--muted);
+      padding-right: 0.4rem;
+      white-space: nowrap;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--pos);
+      box-shadow: 0 0 0 3px var(--pos-wash);
+      flex-shrink: 0;
+    }
+    .status-pill.is-error { color: var(--neg); }
+    .status-pill.is-error .status-dot { background: var(--neg); box-shadow: 0 0 0 3px var(--neg-wash); }
+    .status-pill.is-syncing .status-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); animation: pulse 1.1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+    .countdown b { font-family: var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+    .demo-tag {
+      font-family: var(--mono);
+      font-size: 0.625rem; letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+      background: var(--accent-wash);
+      padding: 0.2rem 0.45rem; border-radius: 5px;
     }
 
-    .header-title {
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: -.01em;
-    }
-
-    .header-title span { color: var(--accent); }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 0.875rem;
-    }
-
-    .status-wrap {
-      display: flex;
-      align-items: center;
-      gap: 0.625rem;
-    }
-
-    #status-bar {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    #status-bar.is-error { color: var(--red); }
-
-    .countdown {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .btn-refresh {
-      background: var(--accent);
-      color: #fff;
-      padding: 0.4rem 0.9rem;
-      font-size: 0.875rem;
-    }
-
-    .btn-refresh:hover { background: var(--accent-hover); }
-
-    .btn-secondary {
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      padding: 0.4rem 0.75rem;
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover { background: var(--bg); }
-
-    /* ── Grid ───────────────────────────────────────── */
     main {
-      padding: 1.5rem 1.75rem;
-      max-width: 1200px;
+      padding: clamp(1.25rem, 3vw, 2.25rem) clamp(1rem, 3vw, 2.25rem) 4rem;
+      max-width: 1320px;
       margin: 0 auto;
     }
 
+    .section-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 1rem;
+      margin: 0 0 1rem;
+    }
+    .section-head h2 {
+      font-size: 0.9rem; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-2);
+    }
+
+    /* ── Summary band ───────────────────────────────── */
+    .summary-cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .sum-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem 1.45rem;
+      flex: 1 1 200px;
+      max-width: 340px;
+      min-width: 0;
+    }
+    .sum-card .eyebrow { display: block; margin-bottom: 0.7rem; }
+    .sum-amount {
+      font-size: clamp(1.35rem, 2vw, 1.7rem);
+      font-weight: 680;
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+      white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .sum-amount .cur { font-size: 0.62em; font-weight: 550; color: var(--muted); margin-left: 0.22rem; }
+    .sum-sub {
+      margin-top: 0.55rem;
+      font-size: 0.78rem; color: var(--muted);
+      display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+    }
+    .sum-sub .eyebrow { margin-bottom: 0; display: inline-flex; align-items: center; line-height: 1; }
+    .sum-flow-pos, .sum-flow-neg { display: inline-flex; align-items: center; line-height: 1; }
+    .sum-flow-pos { color: var(--pos); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .sum-flow-neg { color: var(--neg); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .sum-meta-inline {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      gap: 0.15rem 0.9rem;
+      font-size: 0.82rem; color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .sum-meta-inline .mi { display: inline-flex; align-items: baseline; gap: 0.35rem; white-space: nowrap; }
+    .sum-meta-inline b { color: var(--ink); font-weight: 600; }
+    .sum-meta-inline .mi-mono b { font-family: var(--mono); font-size: 0.92em; }
+
+    /* ── Account grid ───────────────────────────────── */
     #accounts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+      gap: 1.1rem;
     }
 
-    /* ── Account card ──────────────────────────────── */
-    .account-card {
+    .card {
+      position: relative;
       background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      box-shadow: var(--shadow-sm);
-      border: 1px solid var(--border);
-      padding: 1.25rem 1.375rem;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-    }
-
-    .bank-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      padding: 0.2rem 0.6rem;
-      border-radius: 5px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-    }
-
-    .bank-alfabank     { background: #FDECEB; color: #BF1E0E; }
-    .bank-priorbank    { background: #FFF9E6; color: #7A5500; }
-    .bank-belveb       { background: #E3F5F5; color: #005A6E; }
-    .bank-paritetbank  { background: #EEF0FA; color: #23358C; }
-    .bank-unknown      { background: #f3f4f6; color: #374151; }
-
-    .bank-card-alfabank     { border-top: 3px solid #EF3124; }
-    .bank-card-priorbank    { border-top: 3px solid #FFD100; }
-    .bank-card-belveb       { border-top: 3px solid #007A8A; }
-    .bank-card-paritetbank  { border-top: 3px solid #23358C; }
-
-    .currency-tag {
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: .06em;
-      color: var(--text-muted);
-    }
-
-    .account-name {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-bottom: 0.2rem;
+      box-shadow: var(--shadow);
+      padding: 1.5rem 1.6rem 1.35rem;
+      display: flex; flex-direction: column;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      transition: border-color .18s, box-shadow .18s, transform .18s;
+    }
+    .card::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--bank-color, var(--line));
+    }
+    .card:hover {
+      border-color: var(--muted);
+      box-shadow: var(--shadow-lg);
     }
 
-    .account-number {
-      font-family: 'Courier New', monospace;
-      font-size: 0.775rem;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-      letter-spacing: .03em;
+    .card-top {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.15rem;
+    }
+    .bank-chip {
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      min-width: 0;
+    }
+    .bank-mono {
+      position: relative;
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      display: grid; place-items: center;
+      font-family: var(--mono);
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
+      background: var(--bank-wash);
+      color: var(--bank-ink, var(--bank-color));
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .bank-fav {
+      position: absolute; inset: 0; margin: auto;
+      width: 20px; height: 20px; object-fit: contain;
+      display: block;
+    }
+    .bank-mono:has(.bank-fav) .bank-code { opacity: 0; }
+    .bank-name {
+      font-size: 0.86rem; font-weight: 600; letter-spacing: -0.01em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cur-tag {
+      font-family: var(--mono);
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 0.2rem 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .acct-name {
+      font-size: 0.82rem; color: var(--muted);
+      margin-bottom: 0.3rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .acct-no {
+      font-family: var(--mono);
+      font-size: 0.76rem; color: var(--faint);
+      letter-spacing: 0.02em;
+      margin-bottom: 1.3rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     .balance-block { flex: 1; }
-
-    .balance-amount {
-      font-size: 2rem;
-      font-weight: 800;
+    .bal-row { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+    .bal-num {
+      font-size: clamp(1.9rem, 3.2vw, 2.35rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
       line-height: 1;
-      letter-spacing: -.02em;
+    }
+    .bal-cur { font-size: 1rem; font-weight: 550; color: var(--muted); }
+    .avail {
+      font-size: 0.8rem; color: var(--muted);
+      margin-top: 0.55rem;
+      min-height: 1.1rem;
+    }
+    .avail b { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .flow {
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .flow-chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.8rem; font-weight: 600;
       font-variant-numeric: tabular-nums;
-      margin-bottom: 0.2rem;
+      padding: 0.28rem 0.5rem;
+      border-radius: 6px;
     }
+    .flow-chip.pos { color: var(--pos); background: var(--pos-wash); }
+    .flow-chip.neg { color: var(--neg); background: var(--neg-wash); }
+    .flow-when { font-size: 0.66rem; color: var(--faint); font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
 
-    .balance-currency {
-      font-size: 1rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      margin-left: 0.25rem;
+    .card-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: 1.3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--line-soft);
+      font-size: 0.74rem; color: var(--faint);
     }
+    .card-foot .upd { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; }
+    .card-foot .upd b { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-    .available-line {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
-      margin-bottom: 0.5rem;
-      min-height: 1.25rem;
+    .card-actions { display: flex; gap: 0.4rem; }
+    .link-btn {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-family: var(--sans);
+      font-size: 0.78rem; font-weight: 600;
+      color: var(--accent);
+      background: transparent;
+      border: none; cursor: pointer;
+      padding: 0.2rem 0.1rem;
+      transition: color .15s;
     }
+    .link-btn:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+    .link-btn svg { width: 13px; height: 13px; }
 
-    .today-flow {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
-      font-size: 0.8125rem;
-      font-variant-numeric: tabular-nums;
+    /* visibility / edit */
+    .vis-btn { display: none; }
+    body.edit-mode .vis-btn {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.78rem; font-weight: 600;
+      color: var(--muted); background: transparent;
+      border: none; cursor: pointer; padding: 0.2rem 0.1rem;
     }
+    body.edit-mode .vis-btn:hover { color: var(--ink); }
+    body.edit-mode .card.is-hidden { opacity: 0.5; }
+    body.edit-mode .card.is-hidden .vis-btn { color: var(--accent); }
+    body.edit-mode .link-btn { display: none; }
 
-    .flow-credit {
-      color: #16a34a;
-      font-weight: 600;
+    .edit-banner {
+      display: none;
+      align-items: center; gap: 0.6rem;
+      background: var(--accent-wash);
+      border: 1px solid color-mix(in oklab, var(--accent) 25%, transparent);
+      color: var(--accent-ink);
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 1rem;
+      font-size: 0.84rem;
+      margin-bottom: 1.5rem;
     }
+    body.edit-mode .edit-banner { display: flex; }
+    .edit-banner svg { width: 16px; height: 16px; flex-shrink: 0; }
 
-    .flow-debit {
-      color: var(--red);
-      font-weight: 600;
-    }
-
-    .flow-label {
-      color: var(--text-muted);
-      font-weight: 400;
-    }
-
-    .card-footer {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      border-top: 1px solid var(--border);
-      padding-top: 0.75rem;
-      margin-top: auto;
-    }
-
-    /* ── Empty / skeleton ──────────────────────────── */
+    /* ── Empty / skeleton ───────────────────────────── */
     .empty-state {
       grid-column: 1 / -1;
       text-align: center;
       padding: 4rem 1rem;
-      color: var(--text-muted);
-      font-size: 0.9375rem;
+      color: var(--muted);
+      font-size: 0.95rem;
     }
+    .empty-state .link-btn { display: inline-flex; margin-top: 0.5rem; }
 
-    @keyframes shimmer {
-      from { background-position: -600px 0; }
-      to   { background-position:  600px 0; }
-    }
-
+    @keyframes shimmer { to { background-position: 200% 0; } }
     .skel {
-      background: linear-gradient(90deg, #ebebeb 25%, #d8d8d8 50%, #ebebeb 75%);
-      background-size: 1200px 100%;
-      animation: shimmer 1.5s infinite;
-      border-radius: 4px;
+      background: linear-gradient(100deg, var(--line-soft) 30%, var(--line) 50%, var(--line-soft) 70%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 5px;
     }
+    .sk-chip { height: 30px; width: 130px; border-radius: 7px; }
+    .sk-line { height: 13px; }
+    .sk-amt  { height: 34px; width: 60%; border-radius: 7px; }
 
-    .skel-badge  { height: 20px; width: 90px; border-radius: 5px; }
-    .skel-label  { height: 14px; width: 65%; margin-bottom: 0.3rem; }
-    .skel-mono   { height: 12px; width: 80%; margin-bottom: 1rem; }
-    .skel-amount { height: 40px; width: 55%; margin-bottom: 0.25rem; }
-    .skel-avail  { height: 13px; width: 50%; margin-bottom: 1rem; }
-    .skel-footer { height: 12px; width: 70%; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
-
-    /* ── Visibility / edit mode ────────────────────── */
-    .btn-settings {
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      padding: 0.4rem 0.75rem;
-      border: 1px solid var(--border);
-    }
-
-    .btn-settings:hover { background: var(--bg); }
-
-    .btn-settings.is-active {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: #eff6ff;
-    }
-
-    .edit-mode-hint {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      text-align: center;
-      padding: 0.5rem 1rem;
-      background: #eff6ff;
-      border-bottom: 1px solid #bfdbfe;
-    }
-
-    .account-card.is-hidden {
-      opacity: 0.45;
-    }
-
-    .account-card .visibility-btn {
-      display: none;
-      margin-top: 0.75rem;
-      width: 100%;
-      padding: 0.35rem 0.75rem;
-      font-size: 0.8125rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: background .15s, color .15s, border-color .15s;
-    }
-
-    .account-card .visibility-btn:hover {
-      background: var(--bg);
-      color: var(--text);
-    }
-
-    .account-card.is-hidden .visibility-btn {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .account-card.is-hidden .visibility-btn:hover {
-      background: #eff6ff;
-    }
-
-    body.edit-mode .account-card .visibility-btn { display: block; }
-
-    .hidden-count-badge {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      cursor: pointer;
-      text-decoration: underline dotted;
-    }
-
-    .hidden-count-badge:hover { color: var(--accent); }
-
-    /* ── Statement button on card ──────────────────── */
-    .btn-statement {
-      display: none;
-      margin-top: 0.75rem;
-      width: 100%;
-      padding: 0.35rem 0.75rem;
-      font-size: 0.8125rem;
-      border-radius: 6px;
-      border: 1px solid var(--accent);
-      background: #eff6ff;
-      color: var(--accent);
-      cursor: pointer;
-      transition: background .15s, color .15s;
-      font-weight: 500;
-    }
-
-    .btn-statement:hover { background: var(--accent); color: #fff; }
-
-    .account-card.has-statement .btn-statement { display: block; }
-
-    body.edit-mode .account-card.has-statement .btn-statement { display: none; }
-
-    /* ── Statement modal ───────────────────────────── */
+    /* ════════════════════ STATEMENT MODAL ═══════════ */
     #stmt-overlay {
       display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.45);
+      position: fixed; inset: 0;
+      background: rgba(8,10,14,.5);
+      backdrop-filter: blur(3px);
       z-index: 100;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 2rem 1rem;
+      align-items: flex-start; justify-content: center;
+      padding: clamp(1rem, 5vh, 3rem) 1rem;
       overflow-y: auto;
     }
-
     #stmt-overlay.is-open { display: flex; }
-
     #stmt-modal {
       background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      box-shadow: var(--shadow-md);
-      width: 100%;
-      max-width: 900px;
-      display: flex;
-      flex-direction: column;
+      box-shadow: var(--shadow-lg);
+      width: 100%; max-width: 980px;
+      display: flex; flex-direction: column;
+      animation: modalIn .2s cubic-bezier(.2,.7,.3,1);
     }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(.99); } }
 
-    .stmt-modal-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid var(--border);
+    .stmt-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem;
+      padding: 1.4rem 1.6rem 1.2rem;
+      border-bottom: 1px solid var(--line);
     }
-
-    .stmt-modal-title {
-      font-size: 1rem;
-      font-weight: 700;
+    .stmt-head-l { display: flex; align-items: center; gap: 0.85rem; min-width: 0; }
+    .stmt-title { font-size: 1.0625rem; font-weight: 650; letter-spacing: -0.02em; }
+    .stmt-sub {
+      font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+      margin-top: 0.2rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-
-    .stmt-modal-title small {
-      font-family: 'Courier New', monospace;
-      font-size: 0.8rem;
-      font-weight: 400;
-      color: var(--text-muted);
-      margin-left: 0.5rem;
-    }
-
-    .btn-close {
-      background: none;
-      border: none;
-      font-size: 1.25rem;
-      cursor: pointer;
-      color: var(--text-muted);
-      line-height: 1;
-      padding: 0.25rem;
-    }
-
-    .btn-close:hover { color: var(--text); }
 
     .stmt-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 1rem 1.5rem;
-      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 1rem 1.6rem;
+      border-bottom: 1px solid var(--line);
       flex-wrap: wrap;
     }
-
-    .stmt-controls label {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
+    .ctrl-group { display: flex; align-items: center; gap: 0.45rem; }
+    .ctrl-group label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
     .stmt-controls input[type=date] {
-      padding: 0.375rem 0.625rem;
-      border: 1.5px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.875rem;
+      padding: 0.45rem 0.6rem;
+      border: 1.5px solid var(--line);
+      border-radius: 7px;
+      font-size: 0.84rem;
+      font-family: var(--mono);
       outline: none;
-      transition: border-color .15s;
+      background: var(--surface-2);
+      color: var(--ink);
+      transition: border-color .15s, box-shadow .15s;
+      color-scheme: light;
     }
+    html[data-theme="dark"] .stmt-controls input[type=date] { color-scheme: dark; }
+    .stmt-controls input[type=date]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
 
-    .stmt-controls input[type=date]:focus { border-color: var(--accent); }
-
-    .stmt-tabs {
-      display: flex;
-      border: 1.5px solid var(--border);
+    .seg {
+      display: inline-flex;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .seg button {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem; font-weight: 550;
+      border: none; background: transparent;
+      color: var(--muted); cursor: pointer;
       border-radius: 6px;
+      font-family: var(--sans);
+      transition: background .15s, color .15s;
+    }
+    .seg button:hover { color: var(--ink); }
+    .seg button.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+    html[data-theme="dark"] .seg button.is-active { background: var(--line); }
+
+    .stmt-controls .spacer { flex: 1; }
+
+    .stmt-body { padding: 1.1rem 1.6rem 1.6rem; }
+    #stmt-status {
+      font-size: 0.82rem; color: var(--muted);
+      margin-bottom: 0.85rem; min-height: 1.1rem;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    #stmt-status.is-error { color: var(--neg); }
+
+    .stmt-table-wrap {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
       overflow: hidden;
     }
-
-    .stmt-tab {
-      padding: 0.35rem 0.75rem;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      border: none;
-      background: var(--surface);
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: background .15s, color .15s;
-      white-space: nowrap;
-    }
-
-    .stmt-tab + .stmt-tab { border-left: 1px solid var(--border); }
-
-    .stmt-tab:hover { background: var(--bg); color: var(--text); }
-
-    .stmt-tab.is-active { background: var(--accent); color: #fff; }
-
-    .btn-sm {
-      padding: 0.375rem 0.875rem;
-      font-size: 0.875rem;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-weight: 500;
-      transition: background .15s, opacity .15s;
-    }
-
-    .btn-sm:disabled { opacity: .55; cursor: default; }
-
-    .btn-sm-primary { background: var(--accent); color: #fff; }
-    .btn-sm-primary:not(:disabled):hover { background: var(--accent-hover); }
-
-    .btn-sm-secondary {
-      background: transparent;
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-    }
-
-    .btn-sm-secondary:not(:disabled):hover { background: var(--bg); }
-
-    .stmt-body {
-      padding: 1rem 1.5rem 1.5rem;
-      overflow-x: hidden;
-    }
-
-    #stmt-status {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-bottom: 0.75rem;
-      min-height: 1.25rem;
-    }
-
-    #stmt-status.is-error { color: var(--red); }
-
     .stmt-table {
       width: 100%;
       table-layout: fixed;
       border-collapse: collapse;
-      font-size: 0.875rem;
+      font-size: 0.86rem;
     }
-
-    .stmt-table col.col-date   { width: 82px; }
-    .stmt-table col.col-cp     { width: 22%; }
+    .stmt-table col.col-date   { width: 92px; }
+    .stmt-table col.col-cp     { width: 24%; }
     .stmt-table col.col-desc   { width: 30%; }
-    .stmt-table col.col-ref    { width: 14%; }
-    .stmt-table col.col-amount { width: 90px; }
-    .stmt-table col.col-cur    { width: 44px; }
-
-    .stmt-table th {
+    .stmt-table col.col-ref    { width: 13%; }
+    .stmt-table col.col-amount { width: 110px; }
+    .stmt-table thead th {
       text-align: left;
-      padding: 0.5rem 0.75rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      border-bottom: 2px solid var(--border);
+      padding: 0.7rem 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase;
+      font-weight: 600; color: var(--muted);
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line);
       white-space: nowrap;
     }
-
-    .stmt-table td {
-      padding: 0.5rem 0.75rem;
-      border-bottom: 1px solid var(--border);
+    .stmt-table tbody td {
+      padding: 0.7rem 0.85rem;
+      border-bottom: 1px solid var(--line-soft);
       vertical-align: top;
+      color: var(--ink-2);
     }
-
-    .stmt-table tr:last-child td { border-bottom: none; }
-
-    .stmt-table tr:hover td { background: var(--bg); }
-
-    .stmt-debit  { color: var(--red); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-    .stmt-credit { color: #16a34a;   font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-    .stmt-date   { white-space: nowrap; font-family: 'Courier New', monospace; font-size: 0.8rem; }
-    .stmt-ref    { font-family: 'Courier New', monospace; font-size: 0.75rem; color: var(--text-muted); word-break: break-all; }
-    .stmt-desc   { word-break: break-word; overflow-wrap: anywhere; }
-    .stmt-unp    { font-size: 0.72rem; color: var(--text-muted); }
+    .stmt-table tbody tr:last-child td { border-bottom: none; }
+    .stmt-table tbody tr:hover td { background: var(--surface-2); }
+    .st-date   { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .st-cp-name { font-weight: 600; color: var(--ink); word-break: break-word; }
+    .st-unp    { font-family: var(--mono); font-size: 0.7rem; color: var(--faint); margin-top: 0.15rem; }
+    .st-desc   { word-break: break-word; overflow-wrap: anywhere; }
+    .st-ref    { font-family: var(--mono); font-size: 0.72rem; color: var(--faint); word-break: break-all; }
+    .stmt-table td.st-debit  { color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-weight: 600; }
+    .stmt-table td.st-credit { color: var(--pos); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-weight: 600; }
+    .st-head-r { text-align: right; }
+    .apply-btn { background: var(--accent); border-color: var(--accent); color: #fff; flex-shrink: 0; }
+    .apply-btn:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+    .apply-btn svg { width: 16px; height: 16px; }
 
     .stmt-empty {
-      text-align: center;
-      padding: 3rem 1rem;
-      color: var(--text-muted);
+      text-align: center; padding: 3.5rem 1rem;
+      color: var(--muted); font-size: 0.9rem;
+    }
+
+    .stmt-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+      margin-top: 1rem;
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .stmt-totals { display: flex; gap: 1.25rem; }
+    .stmt-totals b { font-variant-numeric: tabular-nums; }
+    .stmt-totals .pos b { color: var(--pos); }
+    .stmt-totals .neg b { color: var(--neg); }
+
+    /* ── responsive ─────────────────────────────────── */
+    @media (max-width: 720px) {
+      .topbar-sub, .topbar-sep { display: none; }
+      .countdown { display: none; }
+      .status-pill .status-txt { display: none; }
+      #accounts-grid { grid-template-columns: 1fr; }
+      .stmt-table col.col-ref, .stmt-table .col-ref-cell { display: none; }
+    }
+    @media (max-width: 520px) {
+      .btn-label { display: none; }
+      .topbar-right .btn-primary { padding: 0.55rem; }
+    }
+
+    /* Statement modal → stacked transaction cards on narrow screens */
+    @media (max-width: 600px) {
+      #stmt-overlay { padding: 0; }
+      #stmt-modal { border-radius: 0; min-height: 100vh; max-width: none; }
+      .stmt-head, .stmt-controls { padding-left: 1.1rem; padding-right: 1.1rem; }
+      .stmt-body { padding: 1rem 1.1rem 2rem; }
+      .stmt-controls { gap: 0.55rem 0.6rem; }
+      .stmt-controls .seg { order: 3; width: 100%; }
+      .stmt-controls .seg button { flex: 1; }
+      .stmt-controls .spacer { display: none; }
+      #stmt-refresh-btn { order: 4; width: 100%; }
+
+      .stmt-table-wrap { border: none; border-radius: 0; }
+      .stmt-table thead, .stmt-table colgroup { display: none; }
+      .stmt-table, .stmt-table tbody { display: block; }
+      .stmt-table tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 0.9rem; row-gap: 0.2rem;
+        padding: 0.9rem 0.15rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .stmt-table tbody tr:hover td { background: transparent; }
+      .stmt-table td { display: block; padding: 0; border: none; }
+      .stmt-table td.st-date { grid-column: 1; grid-row: 1; }
+      .stmt-table td:nth-child(2) { grid-column: 1; grid-row: 2; }
+      .stmt-table td.st-desc {
+        grid-column: 1 / -1; grid-row: 3;
+        margin-top: 0.2rem; color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .stmt-table td.st-credit, .stmt-table td.st-debit {
+        grid-column: 2; grid-row: 1 / 3;
+        align-self: center; text-align: right;
+        font-size: 1.05rem;
+      }
+      .stmt-table td.st-credit:empty, .stmt-table td.st-debit:empty { display: none; }
+      .stmt-table td.st-ref { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
     }
   </style>
 </head>
 <body>
 
-<!-- ──────────────── Login ──────────────── -->
+<!-- ════════════════════ LOGIN ════════════════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-logo">i<span>Bank</span></div>
-    <p>Остатки на расчётных счетах</p>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="2.4" y="2.4" width="8.6" height="8.6" rx="2.3" fill="#2563eb"/>
+          <rect x="5.3" y="5.3" width="10.3" height="10.3" rx="2.9" fill="#0c0e12"/>
+          <rect x="6.7" y="6.7" width="8.6" height="8.6" rx="2.3" fill="#fff"/>
+        </svg>
+      </span>
+      <span class="brand-word">i<b>Bank</b></span>
+    </div>
+    <div class="login-head">
+      <h1>Остатки на счетах</h1>
+      <p>Мониторинг расчётных счетов в банках</p>
+    </div>
     <div class="field">
-      <label for="api-key-input">API-ключ</label>
+      <label for="api-key-input">API-ключ доступа</label>
       <input id="api-key-input" type="password" placeholder="Введите ключ доступа"
              autocomplete="current-password" />
     </div>
     <div id="login-error" class="error-msg"></div>
-    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Войти</button>
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Войти в кабинет</button>
+    <div class="login-foot">
+      <span>Защищённое подключение</span>
+      <span class="mono">v2.0</span>
+    </div>
   </div>
 </div>
 
-<!-- ──────────────── Statement modal ──────── -->
+<!-- ════════════════════ STATEMENT MODAL ═══════════ -->
 <div id="stmt-overlay" onclick="overlayClick(event)">
   <div id="stmt-modal" role="dialog" aria-modal="true">
-    <div class="stmt-modal-header">
-      <div class="stmt-modal-title">
-        Выписка <small id="stmt-title-account"></small>
+    <div class="stmt-head">
+      <div class="stmt-head-l">
+        <div>
+          <div class="stmt-title">Выписка по счёту</div>
+          <div class="stmt-sub" id="stmt-title-account"></div>
+        </div>
       </div>
-      <button class="btn-close" onclick="closeStatement()" title="Закрыть">&times;</button>
+      <button class="icon-btn" onclick="closeStatement()" title="Закрыть (Esc)" aria-label="Закрыть">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
     </div>
     <div class="stmt-controls">
-      <label for="stmt-from">С</label>
-      <input type="date" id="stmt-from" />
-      <label for="stmt-to">по</label>
-      <input type="date" id="stmt-to" />
-      <div class="stmt-tabs">
-        <button class="stmt-tab is-active" data-dir="all"    onclick="setStmtDir(this)">Все</button>
-        <button class="stmt-tab"           data-dir="debit"  onclick="setStmtDir(this)">Расход</button>
-        <button class="stmt-tab"           data-dir="credit" onclick="setStmtDir(this)">Приход</button>
+      <div class="ctrl-group">
+        <label for="stmt-from">С</label>
+        <input type="date" id="stmt-from" />
       </div>
-      <button class="btn btn-sm btn-sm-primary" onclick="loadStatements()">Показать</button>
-      <button class="btn btn-sm btn-sm-secondary" id="stmt-refresh-btn" onclick="refreshStatement()">&#8635; Обновить из банка</button>
+      <div class="ctrl-group">
+        <label for="stmt-to">по</label>
+        <input type="date" id="stmt-to" />
+        <button class="icon-btn apply-btn" onclick="loadStatements()" title="Показать за период" aria-label="Показать за период" data-comment-anchor="aa5e0e8be7-button">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="5.5"/><path d="M13.3 13.3L17 17"/></svg>
+        </button>
+      </div>
+      <div class="seg">
+        <button class="is-active" data-dir="all"    onclick="setStmtDir(this)">Все</button>
+        <button data-dir="credit" onclick="setStmtDir(this)">Приход</button>
+        <button data-dir="debit"  onclick="setStmtDir(this)">Расход</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost" id="stmt-refresh-btn" onclick="refreshStatement()">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 9a6 6 0 10-1.8 4.3M16 14v-4h-4"/></svg>
+        Обновить из банка
+      </button>
     </div>
     <div class="stmt-body">
       <div id="stmt-status"></div>
@@ -680,55 +806,146 @@
   </div>
 </div>
 
-<!-- ──────────────── Dashboard ──────────── -->
+<!-- ════════════════════ DASHBOARD ═════════════════ -->
 <div id="dashboard">
-  <header>
-    <div class="header-title">i<span>Bank</span> · Остатки на счетах</div>
-    <div class="header-right">
-      <div class="status-wrap">
-        <span id="status-bar"></span>
-        <span id="countdown-wrap" class="countdown" style="display:none">
-          · обновление через <b id="countdown-val">30</b>с
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect x="2.4" y="2.4" width="8.6" height="8.6" rx="2.3" fill="#2563eb"/>
+            <rect x="5.3" y="5.3" width="10.3" height="10.3" rx="2.9" fill="#0c0e12"/>
+            <rect x="6.7" y="6.7" width="8.6" height="8.6" rx="2.3" fill="#fff" data-comment-anchor="c42d736607-rect"/>
+          </svg>
         </span>
+        <span class="brand-word">i<b>Bank</b></span>
       </div>
-      <button class="btn btn-settings" id="settings-btn" onclick="toggleEditMode()">&#9881; Настроить</button>
-      <button class="btn btn-refresh" id="refresh-btn" onclick="doRefresh()">&#8635; Синхронизировать</button>
-      <button class="btn btn-secondary" onclick="doLogout()">Выйти</button>
+      <div class="topbar-sep"></div>
+      <div class="topbar-sub">Остатки на счетах</div>
+      <span class="demo-tag" id="demo-tag" style="display:none">Demo</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill" id="status-pill">
+        <span class="status-dot"></span>
+        <span class="status-txt" id="status-bar"></span>
+        <span id="countdown-wrap" class="countdown" style="display:none">· <b id="countdown-val">30</b>с</span>
+      </div>
+      <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Сменить тему" aria-label="Сменить тему"></button>
+      <button class="icon-btn" id="settings-btn" onclick="toggleEditMode()" title="Настроить видимость счетов" aria-label="Настроить">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" data-comment-anchor="c44ccb8c86-path"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <button class="btn btn-primary" id="refresh-btn" onclick="doRefresh()">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 9a6 6 0 10-1.8 4.3M16 14v-4h-4"/></svg>
+        <span class="btn-label">Синхронизировать</span>
+      </button>
+      <button class="btn btn-ghost" onclick="doLogout()" title="Выйти">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17H5a2 2 0 01-2-2V5a2 2 0 012-2h3M13 14l4-4-4-4M17 10H8"/></svg>
+        <span class="btn-label">Выйти</span>
+      </button>
     </div>
   </header>
-  <div id="edit-mode-hint" class="edit-mode-hint" style="display:none">
-    Режим настройки: нажмите на кнопку под счётом, чтобы скрыть или показать его.
-    <span id="hidden-count-hint"></span>
-  </div>
+
   <main>
-    <div id="accounts-grid"></div>
+    <div class="edit-banner">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6.5v4M10 13.5h.01"/></svg>
+      <span>Режим настройки. Нажмите «Скрыть» под счётом, чтобы убрать его с дашборда. <b id="hidden-count-hint"></b></span>
+    </div>
+
+    <section id="summary-section" style="display:none">
+      <div class="section-head">
+        <h2>Сводка по счетам</h2>
+        <div class="sum-meta-inline" id="summary-meta"></div>
+      </div>
+      <div class="summary-cards" id="summary-grid"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2 id="accounts-title">Счета</h2>
+      </div>
+      <div id="accounts-grid"></div>
+    </section>
   </main>
 </div>
 
 <script>
   const POLL_SEC = 30;
 
+  // ── bank metadata ────────────────────────────────
+  const BANKS = {
+    alfabank:    { code: 'ALFA', label: 'Альфа-Банк',  color: '#ef3124', wash: '#fdeceb', ink: '#bf1e0e', fav: 'https://online.alfabank.by/favicon.ico' },
+    priorbank:   { code: 'PRIO', label: 'Приорбанк',   color: '#ffd100', wash: '#fff7d6', ink: '#7a5500', fav: 'https://www.priorbank.by/favicon.ico' },
+    belveb:      { code: 'BVEB', label: 'БелВЭБ',       color: '#007a8a', wash: '#e1f4f6', ink: '#005a6e', fav: 'https://dbo2.bveb.by/favicon.ico' },
+    paritetbank: { code: 'PRTB', label: 'Паритетбанк', color: '#23358c', wash: '#ecedfb', ink: '#23358c', fav: 'https://eparitet.by/favicons/favicon-32x32.png' },
+    unknown:     { code: 'BANK', label: 'Банк',        color: '#6a7180', wash: '#eef0f3', ink: '#374151', fav: '' },
+  };
+  function bankMeta(b) { return BANKS[b] || BANKS.unknown; }
+
   let apiKey = sessionStorage.getItem('apiKey') || '';
   let countdownTimer = null;
   let secondsLeft = POLL_SEC;
+  let demoMode = false;
 
   let isEditMode = false;
   let hiddenAccounts = new Set(JSON.parse(localStorage.getItem('hiddenAccounts') || '[]'));
   let lastAccounts = [];
   let statementAccountKeys = new Set();
-  let todayTotals = {}; // key: "bank:accountNumber" → { totalCredit, totalDebit, currency }
+  let todayTotals = {};
 
-  // active statement context
   let stmtBank = '';
   let stmtAccount = '';
   let lastTxs = [];
 
-  // ── Boot ──────────────────────────────────────────
-  if (apiKey) {
-    showDashboard();
-    renderSkeletons(3);
-    loadStatementAccounts().then(() => Promise.all([loadTodayTotals(), loadAccounts()]));
-    startCountdown();
+  // ── Theme ────────────────────────────────────────
+  const SUN = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="3.4"/><path d="M10 2v2M10 16v2M18 10h-2M4 10H2M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4M15.7 15.7l-1.4-1.4M5.7 5.7L4.3 4.3"/></svg>`;
+  const MOON = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 11.5A6.5 6.5 0 118.5 3.5a5 5 0 008 8z"/></svg>`;
+
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('theme', t);
+    const btn = document.getElementById('theme-btn');
+    if (btn) { btn.innerHTML = t === 'dark' ? SUN : MOON; btn.title = t === 'dark' ? 'Светлая тема' : 'Тёмная тема'; }
+  }
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  }
+  (function initTheme() {
+    const saved = localStorage.getItem('theme');
+    const sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(saved || (sysDark ? 'dark' : 'light'));
+  })();
+
+  // ── Boot ─────────────────────────────────────────
+  (async function boot() {
+    const backendUp = await probeBackend();
+    if (!backendUp) {
+      // Preview / no server → demo experience
+      demoMode = true;
+      apiKey = apiKey || 'demo';
+      sessionStorage.setItem('apiKey', apiKey);
+      document.getElementById('demo-tag').style.display = '';
+      showDashboard();
+      renderSkeletons(6);
+      await loadStatementAccounts();
+      await Promise.all([loadTodayTotals(), loadAccounts()]);
+      startCountdown();
+      return;
+    }
+    if (apiKey) {
+      showDashboard();
+      renderSkeletons(6);
+      await loadStatementAccounts();
+      await Promise.all([loadTodayTotals(), loadAccounts()]);
+      startCountdown();
+    }
+  })();
+
+  async function probeBackend() {
+    try {
+      const r = await fetch('/health', { method: 'GET' });
+      return r.ok;
+    } catch { return false; }
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -742,24 +959,23 @@
     if (e.key === 'Enter') doLogin();
   });
 
-  // ── Auth ──────────────────────────────────────────
+  // ── Auth ─────────────────────────────────────────
   async function doLogin() {
     const key = document.getElementById('api-key-input').value.trim();
     if (!key) return;
-
-    setLoginBtn(true, 'Проверка...');
+    setLoginBtn(true, 'Проверка…');
     setLoginError('');
-
     try {
       const res = await apiFetch('/api/accounts', 'GET', key);
       if (res.status === 401) {
         setLoginError('Неверный API-ключ');
-        setLoginBtn(false, 'Войти');
+        setLoginBtn(false, 'Войти в кабинет');
         return;
       }
       sessionStorage.setItem('apiKey', key);
       apiKey = key;
       showDashboard();
+      renderSkeletons(6);
       await loadStatementAccounts();
       await loadTodayTotals();
       const data = await res.json();
@@ -768,7 +984,7 @@
       startCountdown();
     } catch {
       setLoginError('Не удалось подключиться к серверу');
-      setLoginBtn(false, 'Войти');
+      setLoginBtn(false, 'Войти в кабинет');
     }
   }
 
@@ -780,10 +996,10 @@
     document.getElementById('dashboard').style.display = 'none';
     document.getElementById('api-key-input').value = '';
     setLoginError('');
-    setLoginBtn(false, 'Войти');
+    setLoginBtn(false, 'Войти в кабинет');
   }
 
-  // ── Data ──────────────────────────────────────────
+  // ── Data ─────────────────────────────────────────
   async function loadAccounts() {
     try {
       const res = await apiFetch('/api/accounts', 'GET');
@@ -812,24 +1028,27 @@
   async function doRefresh() {
     const btn = document.getElementById('refresh-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Синхронизация...';
+    btn.classList.add('spinning');
+    const label = btn.querySelector('.btn-label');
+    const prevLabel = label ? label.textContent : '';
+    if (label) label.textContent = 'Синхронизация…';
     stopCountdown();
-    setStatus('Синхронизация запущена...');
-
+    setSyncing('Синхронизация запущена…');
     try {
       await apiFetch('/api/refresh', 'POST');
-      await sleep(6000);
+      await sleep(demoMode ? 1400 : 6000);
       await loadAccounts();
     } catch {
       setStatus('Ошибка запроса синхронизации', true);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '&#8635; Синхронизировать';
+      btn.classList.remove('spinning');
+      if (label) label.textContent = prevLabel || 'Синхронизировать';
       startCountdown();
     }
   }
 
-  // ── Countdown ─────────────────────────────────────
+  // ── Countdown ────────────────────────────────────
   function startCountdown() {
     stopCountdown();
     secondsLeft = POLL_SEC;
@@ -838,84 +1057,129 @@
     countdownTimer = setInterval(async () => {
       secondsLeft--;
       updateCountdownDisplay();
-      if (secondsLeft <= 0) {
-        secondsLeft = POLL_SEC;
-        await loadAccounts();
-      }
+      if (secondsLeft <= 0) { secondsLeft = POLL_SEC; await loadAccounts(); }
     }, 1000);
   }
-
   function stopCountdown() {
     clearInterval(countdownTimer);
     countdownTimer = null;
     document.getElementById('countdown-wrap').style.display = 'none';
   }
-
   function updateCountdownDisplay() {
     document.getElementById('countdown-val').textContent = secondsLeft;
   }
 
-  // ── Edit mode / visibility ────────────────────────
+  // ── Edit mode ────────────────────────────────────
   function toggleEditMode() {
     isEditMode = !isEditMode;
     document.body.classList.toggle('edit-mode', isEditMode);
     document.getElementById('settings-btn').classList.toggle('is-active', isEditMode);
-    document.getElementById('edit-mode-hint').style.display = isEditMode ? 'block' : 'none';
+    const sb = document.getElementById('settings-btn');
+    sb.style.borderColor = isEditMode ? 'var(--accent)' : '';
+    sb.style.color = isEditMode ? 'var(--accent)' : '';
+    sb.style.background = isEditMode ? 'var(--accent-wash)' : '';
     renderAccounts(lastAccounts);
   }
-
   function toggleAccountVisibility(key) {
-    if (hiddenAccounts.has(key)) {
-      hiddenAccounts.delete(key);
-    } else {
-      hiddenAccounts.add(key);
-    }
+    if (hiddenAccounts.has(key)) hiddenAccounts.delete(key);
+    else hiddenAccounts.add(key);
     localStorage.setItem('hiddenAccounts', JSON.stringify([...hiddenAccounts]));
     renderAccounts(lastAccounts);
   }
 
-  // ── Render ────────────────────────────────────────
+  // ── Render: skeletons ────────────────────────────
   function renderSkeletons(n) {
     const grid = document.getElementById('accounts-grid');
     grid.innerHTML = Array.from({ length: n }, () => `
-      <div class="account-card">
-        <div class="card-header">
-          <div class="skel skel-badge"></div>
-        </div>
-        <div class="skel skel-label"></div>
-        <div class="skel skel-mono"></div>
-        <div class="skel skel-amount"></div>
-        <div class="skel skel-avail"></div>
-        <div class="skel skel-footer"></div>
-      </div>
-    `).join('');
+      <div class="card">
+        <div class="card-top"><div class="skel sk-chip"></div></div>
+        <div class="skel sk-line" style="width:55%;margin-bottom:.5rem"></div>
+        <div class="skel sk-line" style="width:75%;margin-bottom:1.3rem"></div>
+        <div class="skel sk-amt" style="margin-bottom:.8rem"></div>
+        <div class="skel sk-line" style="width:45%;margin-bottom:1.3rem"></div>
+        <div class="skel sk-line" style="width:65%"></div>
+      </div>`).join('');
   }
 
+  // ── Render: summary ──────────────────────────────
+  function renderSummary(accounts) {
+    const section = document.getElementById('summary-section');
+    const visible = accounts.filter(a => !hiddenAccounts.has(`${a.bank}:${a.accountNumber}`));
+    if (!visible.length) { section.style.display = 'none'; return; }
+
+    // group balances + today flow by currency
+    const byCur = {};
+    for (const a of visible) {
+      const c = a.currency || '—';
+      byCur[c] = byCur[c] || { currency: c, total: 0, count: 0, credit: 0, debit: 0 };
+      byCur[c].total += (a.balance || 0);
+      byCur[c].count += 1;
+      const t = todayTotals[`${a.bank}:${a.accountNumber}`];
+      if (t) { byCur[c].credit += (t.totalCredit || 0); byCur[c].debit += (t.totalDebit || 0); }
+    }
+    // order: BYN first, then by total desc
+    const curs = Object.values(byCur).sort((x, y) =>
+      (x.currency === 'BYN' ? -1 : y.currency === 'BYN' ? 1 : y.total - x.total));
+
+    const banksUsed = new Set(visible.map(a => a.bank)).size;
+    const lastUpd = visible.reduce((max, a) => {
+      const t = a.balanceUpdatedAt ? new Date(a.balanceUpdatedAt).getTime() : 0;
+      return t > max ? t : max;
+    }, 0);
+
+    const curCells = curs.map(c => {
+      const flow = (c.credit > 0 || c.debit > 0) ? `
+        <div class="sum-sub">
+          ${c.credit > 0 ? `<span class="sum-flow-pos">+&thinsp;${fmtBalance(c.credit)}</span>` : ''}
+          ${c.debit  > 0 ? `<span class="sum-flow-neg">−&thinsp;${fmtBalance(c.debit)}</span>`  : ''}
+          <span class="eyebrow">сегодня</span>
+        </div>` : `<div class="sum-sub"><span>${c.count} ${plural(c.count,'счёт','счёта','счетов')}</span></div>`;
+      return `
+        <div class="sum-card">
+          <span class="eyebrow">${esc(c.currency)} · итого</span>
+          <div class="sum-amount num">${fmtBalance(c.total)}<span class="cur">${esc(c.currency)}</span></div>
+          ${flow}
+        </div>`;
+    }).join('');
+
+    const metaInline = `
+      <span class="mi">Счетов <b>${visible.length}</b></span>
+      <span class="mi">Банков <b>${banksUsed}</b></span>
+      <span class="mi mi-mono">Обновлено <b>${lastUpd ? fmtClock(lastUpd) : '—'}</b></span>`;
+
+    document.getElementById('summary-grid').innerHTML = curCells;
+    document.getElementById('summary-meta').innerHTML = metaInline;
+    section.style.display = '';
+  }
+
+  // ── Render: accounts ─────────────────────────────
   function renderAccounts(accounts) {
     lastAccounts = accounts || [];
     const grid = document.getElementById('accounts-grid');
 
     if (!accounts || accounts.length === 0) {
-      grid.innerHTML = '<div class="empty-state">Счета не найдены.<br>Дождитесь первой синхронизации или нажмите «Синхронизировать».</div>';
+      document.getElementById('summary-section').style.display = 'none';
+      grid.innerHTML = `<div class="empty-state">Счета не найдены.<br>Дождитесь первой синхронизации или нажмите «Синхронизировать».</div>`;
+      document.getElementById('accounts-title').textContent = 'Счета';
       return;
     }
 
     const visibleAccounts = isEditMode
       ? accounts
       : accounts.filter(a => !hiddenAccounts.has(`${a.bank}:${a.accountNumber}`));
-
     const hiddenCount = accounts.filter(a => hiddenAccounts.has(`${a.bank}:${a.accountNumber}`)).length;
 
-    // Update hidden count hint in edit mode banner
     const hint = document.getElementById('hidden-count-hint');
-    if (hint) {
-      hint.textContent = hiddenCount > 0 ? ` Скрыто счетов: ${hiddenCount}.` : '';
-    }
+    if (hint) hint.textContent = hiddenCount > 0 ? `Скрыто: ${hiddenCount}.` : '';
+
+    document.getElementById('accounts-title').textContent =
+      `Счета · ${visibleAccounts.length}${hiddenCount && !isEditMode ? ` (скрыто ${hiddenCount})` : ''}`;
+
+    renderSummary(accounts);
 
     if (visibleAccounts.length === 0) {
       grid.innerHTML = `<div class="empty-state">Все счета скрыты.
-        <br><span class="hidden-count-badge" onclick="toggleEditMode()">Настроить видимость</span>
-      </div>`;
+        <br><button class="link-btn" onclick="toggleEditMode()">Настроить видимость</button></div>`;
       return;
     }
 
@@ -923,41 +1187,86 @@
       const key = `${a.bank}:${a.accountNumber}`;
       const isHidden = hiddenAccounts.has(key);
       const hasStmt = statementAccountKeys.has(key);
+      const m = bankMeta(a.bank);
+      const availLine = (a.available != null && a.available !== a.balance)
+        ? `Доступно: <b>${fmtBalance(a.available)}&nbsp;${esc(a.currency)}</b>` : '';
       return `
-      <div class="account-card bank-card-${esc(a.bank)}${isHidden ? ' is-hidden' : ''}${hasStmt ? ' has-statement' : ''}">
-        <div class="card-header">
-          <span class="bank-badge bank-${esc(a.bank)}">${bankIcon(a.bank)}${bankLabel(a.bank)}</span>
-          <span class="currency-tag">${esc(a.currency)}</span>
+      <article class="card${isHidden ? ' is-hidden' : ''}"
+               style="--bank-color:${m.color};--bank-wash:${m.wash};--bank-ink:${m.ink}">
+        <div class="card-top">
+          <span class="bank-chip">
+            <span class="bank-mono" data-bank="${esc(a.bank)}"><span class="bank-code">${esc(m.code)}</span></span>
+            <span class="bank-name">${esc(m.label)}</span>
+          </span>
+          <span class="cur-tag">${esc(a.currency)}</span>
         </div>
-        ${a.name ? `<div class="account-name" title="${esc(a.name)}">${esc(a.name)}</div>` : ''}
-        <div class="account-number">${fmtAccountNumber(a.accountNumber)}</div>
+        ${a.name ? `<div class="acct-name" title="${esc(a.name)}">${esc(a.name)}</div>` : ''}
+        <div class="acct-no" title="${esc(a.accountNumber)}">${fmtAccountNumber(a.accountNumber)}</div>
         <div class="balance-block">
-          <div>
-            <span class="balance-amount">${fmtBalance(a.balance)}</span>
-            <span class="balance-currency">${esc(a.currency)}</span>
+          <div class="bal-row">
+            <span class="bal-num num">${fmtBalance(a.balance)}</span>
+            <span class="bal-cur">${esc(a.currency)}</span>
           </div>
-          <div class="available-line">
-            ${a.available != null && a.available !== a.balance
-              ? `Доступно: ${fmtBalance(a.available)}&nbsp;${esc(a.currency)}`
-              : ''}
-          </div>
-          ${renderTodayFlow(key, a.currency)}
+          <div class="avail">${availLine}</div>
+          ${renderTodayFlow(key)}
         </div>
-        <div class="card-footer">
-          Обновлено: ${a.balanceUpdatedAt ? fmtDateTime(a.balanceUpdatedAt) : '—'}
+        <div class="card-foot">
+          <span class="upd">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.4"/><path d="M7 4v3l2 1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <b>${a.balanceUpdatedAt ? fmtDateTime(a.balanceUpdatedAt) : '—'}</b>
+          </span>
+          <span class="card-actions">
+            ${hasStmt ? `<button class="link-btn" onclick="openStatement('${esc(a.bank)}','${esc(a.accountNumber)}')">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h5l3 3v8H3z"/><path d="M8 1.5v3h3M5 7.5h4M5 9.8h4"/></svg>
+              Выписка</button>` : ''}
+            <button class="vis-btn" onclick="toggleAccountVisibility('${esc(key)}')">
+              ${isHidden
+                ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8S3.8 3.5 8 3.5 14.5 8 14.5 8 12.2 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.9"/></svg> Показать`
+                : `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 2l12 12M6.5 6.6A1.9 1.9 0 008 9.9M4.2 4.4C2.5 5.5 1.5 8 1.5 8s2.3 4.5 6.5 4.5c1 0 1.9-.25 2.7-.65M9.6 4C9.1 3.7 8.6 3.5 8 3.5 3.8 3.5 1.5 8 1.5 8m13 0s-.9 1.7-2.6 3"/></svg> Скрыть`}
+            </button>
+          </span>
         </div>
-        <button class="btn-statement" onclick="openStatement('${esc(a.bank)}', '${esc(a.accountNumber)}')">
-          &#128196; Выписка
-        </button>
-        <button class="visibility-btn" onclick="toggleAccountVisibility('${esc(key)}')">
-          ${isHidden ? '&#128065; Показать счёт' : '&#128683; Скрыть счёт'}
-        </button>
-      </div>
-    `;
+      </article>`;
     }).join('');
+    hydrateFavicons();
   }
 
-  // ── Statement accounts ────────────────────────────
+  // Load each bank's favicon and swap it in only after it loads successfully —
+  // the monogram stays as a graceful fallback, so a broken/blocked icon is never shown.
+  const favOk = new Set();
+  function hydrateFavicons() {
+    document.querySelectorAll('.bank-mono[data-bank]').forEach(el => {
+      const bank = el.dataset.bank;
+      const m = bankMeta(bank);
+      if (!m.fav || el.querySelector('.bank-fav')) return;
+      const add = () => {
+        if (el.querySelector('.bank-fav')) return;
+        const img = document.createElement('img');
+        img.className = 'bank-fav';
+        img.src = m.fav; img.alt = ''; img.width = 20; img.height = 20;
+        el.appendChild(img);
+      };
+      if (favOk.has(bank)) { add(); return; }
+      const probe = new Image();
+      probe.onload = () => { favOk.add(bank); add(); };
+      probe.src = m.fav;
+    });
+  }
+
+  function renderTodayFlow(key) {
+    const t = todayTotals[key];
+    if (!t) return '';
+    const hasCredit = t.totalCredit > 0;
+    const hasDebit  = t.totalDebit  > 0;
+    if (!hasCredit && !hasDebit) return '';
+    return `<div class="flow">
+      ${hasCredit ? `<span class="flow-chip pos">+&thinsp;${fmtBalance(t.totalCredit)}</span>` : ''}
+      ${hasDebit  ? `<span class="flow-chip neg">−&thinsp;${fmtBalance(t.totalDebit)}</span>`  : ''}
+      <span class="flow-when">сегодня</span>
+    </div>`;
+  }
+
+  // ── Statement accounts ───────────────────────────
   async function loadStatementAccounts() {
     try {
       const res = await apiFetch('/api/statement-accounts', 'GET');
@@ -967,40 +1276,36 @@
     } catch { /* ignore */ }
   }
 
-  // ── Statement modal ───────────────────────────────
+  // ── Statement modal ──────────────────────────────
   function openStatement(bank, accountNumber) {
     stmtBank = bank;
     stmtAccount = accountNumber;
     document.getElementById('stmt-title-account').textContent =
-      `${bankLabel(bank)} · ${fmtAccountNumber(accountNumber)}`;
-    document.getElementById('stmt-from').value = todayStr();
+      `${bankMeta(bank).label} · ${fmtAccountNumber(accountNumber)}`;
+    document.getElementById('stmt-from').value = firstDayOfMonthStr();
     document.getElementById('stmt-to').value = todayStr();
-    document.querySelectorAll('.stmt-tab').forEach((t, i) => t.classList.toggle('is-active', i === 0));
+    document.querySelectorAll('.seg button').forEach((t, i) => t.classList.toggle('is-active', i === 0));
     document.getElementById('stmt-status').textContent = '';
     document.getElementById('stmt-status').className = '';
     document.getElementById('stmt-content').innerHTML = '';
     document.getElementById('stmt-overlay').classList.add('is-open');
+    document.body.style.overflow = 'hidden';
     loadStatements();
   }
-
   function closeStatement() {
     document.getElementById('stmt-overlay').classList.remove('is-open');
+    document.body.style.overflow = '';
   }
-
   function overlayClick(e) {
     if (e.target === document.getElementById('stmt-overlay')) closeStatement();
   }
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeStatement();
-  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeStatement(); });
 
   async function loadStatements() {
     const from = document.getElementById('stmt-from').value;
     const to = document.getElementById('stmt-to').value;
-    setStmtStatus('Загрузка...');
+    setStmtStatus('Загрузка…');
     document.getElementById('stmt-content').innerHTML = '';
-
     try {
       const params = new URLSearchParams({ bank: stmtBank, account: stmtAccount, limit: '1000' });
       if (from) params.set('from', from);
@@ -1010,9 +1315,6 @@
       const data = await res.json();
       lastTxs = data.transactions || [];
       renderStmtTable(lastTxs);
-      setStmtStatus(lastTxs.length > 0
-        ? `Загружено транзакций: ${lastTxs.length}`
-        : '');
     } catch {
       setStmtStatus('Ошибка подключения', true);
     }
@@ -1021,36 +1323,37 @@
   async function refreshStatement() {
     const btn = document.getElementById('stmt-refresh-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Обновляю...';
+    btn.classList.add('spinning');
     const from = document.getElementById('stmt-from').value || firstDayOfMonthStr();
     const to   = document.getElementById('stmt-to').value   || todayStr();
-    setStmtStatus('Запрос на обновление выписки отправлен...');
-
+    setStmtStatus('Запрос на обновление выписки отправлен…');
     try {
-      await fetch('/api/statements/refresh', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank: stmtBank, account: stmtAccount, dateFrom: from, dateTo: to }),
-      });
-      setStmtStatus('Обновление запущено. Подождите 10–30 секунд и нажмите «Показать».');
+      await apiFetch('/api/statements/refresh', 'POST', undefined,
+        { bank: stmtBank, account: stmtAccount, dateFrom: from, dateTo: to });
+      if (demoMode) {
+        await sleep(1200);
+        await loadStatements();
+        setStmtStatus('Выписка обновлена из банка.');
+      } else {
+        setStmtStatus('Обновление запущено. Подождите 10–30 секунд и нажмите «Показать».');
+      }
     } catch {
       setStmtStatus('Ошибка запроса обновления', true);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '&#8635; Обновить из банка';
+      btn.classList.remove('spinning');
     }
   }
 
   function setStmtDir(btn) {
-    document.querySelectorAll('.stmt-tab').forEach(t => t.classList.remove('is-active'));
+    document.querySelectorAll('.seg button').forEach(t => t.classList.remove('is-active'));
     btn.classList.add('is-active');
     renderStmtTable(lastTxs);
   }
 
   function renderStmtTable(txs) {
     const el = document.getElementById('stmt-content');
-
-    const direction = document.querySelector('.stmt-tab.is-active')?.dataset.dir ?? 'all';
+    const direction = document.querySelector('.seg button.is-active')?.dataset.dir ?? 'all';
     const filtered = direction === 'debit'  ? txs.filter(t => t.debit  != null)
                    : direction === 'credit' ? txs.filter(t => t.credit != null)
                    : txs;
@@ -1059,52 +1362,51 @@
       el.innerHTML = txs.length
         ? '<div class="stmt-empty">Нет операций, соответствующих фильтру.</div>'
         : '<div class="stmt-empty">Транзакций за выбранный период не найдено.</div>';
-      setStmtStatus(txs.length ? `Загружено транзакций: ${txs.length} · показано: 0` : '');
+      setStmtStatus(txs.length ? `Всего: ${txs.length} · показано: 0` : 'Операций нет');
       return;
     }
 
-    if (direction !== 'all') {
-      setStmtStatus(`Загружено транзакций: ${txs.length} · показано: ${filtered.length}`);
-    }
+    let totCredit = 0, totDebit = 0;
+    for (const t of filtered) { totCredit += (t.credit || 0); totDebit += (t.debit || 0); }
 
     const rows = filtered.map(t => {
-      const cpName = t.counterpartyName ? esc(t.counterpartyName) : '';
-      const cpUnp  = t.counterpartyUnp  ? `<br><span class="stmt-unp">УНП&nbsp;${esc(t.counterpartyUnp)}</span>` : '';
-      const cpCell = cpName ? cpName + cpUnp : (t.counterpartyUnp ? `<span class="stmt-unp">УНП&nbsp;${esc(t.counterpartyUnp)}</span>` : '—');
+      const cpName = t.counterpartyName ? `<div class="st-cp-name">${esc(t.counterpartyName)}</div>` : '';
+      const cpUnp  = t.counterpartyUnp ? `<div class="st-unp">УНП ${esc(t.counterpartyUnp)}</div>` : '';
+      const cpCell = (cpName || cpUnp) ? cpName + cpUnp : '—';
       return `
       <tr>
-        <td class="stmt-date">${fmtDate(t.transactionDate)}</td>
-        <td class="stmt-desc">${cpCell}</td>
-        <td class="stmt-desc">${esc(t.description || '—')}</td>
-        <td class="stmt-ref">${esc(t.reference || '—')}</td>
-        <td class="stmt-debit">${t.debit != null ? fmtBalance(t.debit) : ''}</td>
-        <td class="stmt-credit">${t.credit != null ? fmtBalance(t.credit) : ''}</td>
-      </tr>
-    `}).join('');
+        <td class="st-date">${fmtDate(t.transactionDate)}</td>
+        <td>${cpCell}</td>
+        <td class="st-desc">${esc(t.description || '—')}</td>
+        <td class="st-ref col-ref-cell">${esc(t.reference || '—')}</td>
+        <td class="st-credit">${t.credit != null ? fmtBalance(t.credit) : ''}</td>
+        <td class="st-debit">${t.debit != null ? fmtBalance(t.debit) : ''}</td>
+      </tr>`;
+    }).join('');
 
     el.innerHTML = `
-      <table class="stmt-table">
-        <colgroup>
-          <col class="col-date">
-          <col class="col-cp">
-          <col class="col-desc">
-          <col class="col-ref">
-          <col class="col-amount">
-          <col class="col-amount">
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Контрагент</th>
-            <th>Описание</th>
-            <th>Документ</th>
-            <th style="text-align:right">Дебет</th>
-            <th style="text-align:right">Кредит</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+      <div class="stmt-table-wrap">
+        <table class="stmt-table">
+          <colgroup>
+            <col class="col-date"><col class="col-cp"><col class="col-desc">
+            <col class="col-ref"><col class="col-amount"><col class="col-amount">
+          </colgroup>
+          <thead><tr>
+            <th>Дата</th><th>Контрагент</th><th>Назначение</th>
+            <th class="col-ref-cell">Документ</th>
+            <th class="st-head-r">Приход</th><th class="st-head-r">Расход</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="stmt-foot">
+        <span>Показано операций: <b>${filtered.length}</b></span>
+        <span class="stmt-totals">
+          <span class="pos">Приход: <b>+${fmtBalance(totCredit)}</b></span>
+          <span class="neg">Расход: <b>−${fmtBalance(totDebit)}</b></span>
+        </span>
+      </div>`;
+    setStmtStatus(`Период загружен · всего операций: ${txs.length}`);
   }
 
   function setStmtStatus(msg, isError = false) {
@@ -1113,118 +1415,179 @@
     el.className = isError ? 'is-error' : '';
   }
 
-  function todayStr() {
-    return new Date().toISOString().slice(0, 10);
-  }
-
-  function firstDayOfMonthStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-  }
-
-  function renderTodayFlow(key, currency) {
-    const t = todayTotals[key];
-    if (!t) return '';
-    const cur = esc(t.currency || currency);
-    const hasCredit = t.totalCredit > 0;
-    const hasDebit  = t.totalDebit  > 0;
-    if (!hasCredit && !hasDebit) return '';
-    return `<div class="today-flow">
-      ${hasCredit ? `<span class="flow-credit">+&thinsp;${fmtBalance(t.totalCredit)}&nbsp;${cur}</span>` : ''}
-      ${hasDebit  ? `<span class="flow-debit">−&thinsp;${fmtBalance(t.totalDebit)}&nbsp;${cur}</span>`  : ''}
-      <span class="flow-label">сегодня</span>
-    </div>`;
-  }
-
-  // ── Helpers ───────────────────────────────────────
-  function apiFetch(path, method = 'GET', key) {
-    return fetch(path, {
-      method,
-      headers: { 'X-Api-Key': key ?? apiKey },
-    });
-  }
-
-  function bankLabel(bank) {
-    return { alfabank: 'Альфа-Банк', priorbank: 'Приорбанк', belveb: 'БелВЭБ', paritetbank: 'Паритетбанк' }[bank] ?? bank;
-  }
-
-  function bankIcon(bank) {
-    const favicons = {
-      alfabank:     'https://online.alfabank.by/favicon.ico',
-      priorbank:    'https://www.priorbank.by/favicon.ico',
-      belveb:       'https://dbo2.bveb.by/favicon.ico',
-      paritetbank:  'https://eparitet.by/favicons/favicon-32x32.png',
-    };
-    const src = favicons[bank];
-    if (!src) return '';
-    return `<img src="${src}" width="14" height="14" alt="" aria-hidden="true" style="border-radius:2px;flex-shrink:0" onerror="this.style.display='none'">`;
+  // ── Helpers ──────────────────────────────────────
+  function apiFetch(path, method = 'GET', key, body) {
+    if (demoMode) return mockFetch(path, method, body);
+    const opts = { method, headers: { 'X-Api-Key': key ?? apiKey } };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    return fetch(path, opts);
   }
 
   function fmtBalance(val) {
     if (val == null) return '—';
-    return new Intl.NumberFormat('ru-BY', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(val);
+    return new Intl.NumberFormat('ru-BY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
   }
-
   function fmtAccountNumber(num) {
     if (!num) return '—';
     return num.replace(/(.{4})/g, '$1 ').trim();
   }
-
   function fmtDate(iso) {
     if (!iso) return '—';
     const [y, m, d] = iso.slice(0, 10).split('-');
     return `${d}.${m}.${y}`;
   }
-
   function fmtDateTime(iso) {
     if (!iso) return '—';
     const s = iso.includes('Z') || iso.includes('+') ? iso : iso + 'Z';
     return new Date(s).toLocaleString('ru-BY', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-      timeZone: 'Europe/Minsk',
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk',
     });
   }
-
+  function fmtClock(ms) {
+    return new Date(ms).toLocaleTimeString('ru-BY', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Minsk',
+    });
+  }
   function formatTime(d) {
     return d.toLocaleTimeString('ru-BY', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      timeZone: 'Europe/Minsk',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Minsk',
     });
   }
-
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function firstDayOfMonthStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+  function plural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
   function esc(s) {
     return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   function setStatus(msg, isError = false) {
     const el = document.getElementById('status-bar');
     el.textContent = msg;
-    el.className = isError ? 'is-error' : '';
+    const pill = document.getElementById('status-pill');
+    pill.classList.remove('is-syncing');
+    pill.classList.toggle('is-error', isError);
   }
-
+  function setSyncing(msg) {
+    const el = document.getElementById('status-bar');
+    el.textContent = msg;
+    const pill = document.getElementById('status-pill');
+    pill.classList.remove('is-error');
+    pill.classList.add('is-syncing');
+  }
   function setLoginBtn(disabled, label) {
     const btn = document.getElementById('login-btn');
-    btn.disabled = disabled;
-    btn.textContent = label;
+    btn.disabled = disabled; btn.textContent = label;
   }
-
-  function setLoginError(msg) {
-    document.getElementById('login-error').textContent = msg;
-  }
-
+  function setLoginError(msg) { document.getElementById('login-error').textContent = msg; }
   function showDashboard() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+  }
+
+  // ════════════════════ DEMO DATA LAYER ═══════════
+  // Active only when no backend is reachable (preview).
+  const DEMO = buildDemoData();
+
+  function buildDemoData() {
+    const nowIso = (minAgo) => new Date(Date.now() - minAgo * 60000).toISOString();
+    const accounts = [
+      { id:1, bank:'alfabank',    accountNumber:'BY24ALFA30120A45612000840', currency:'BYN', name:'Расчётный счёт',        balance:184523.78, available:182100.40, balanceUpdatedAt:nowIso(3) },
+      { id:2, bank:'alfabank',    accountNumber:'BY11ALFA30140USD000000111', currency:'USD', name:'Валютный счёт USD',     balance:42150.00,  available:42150.00,  balanceUpdatedAt:nowIso(3) },
+      { id:3, bank:'priorbank',   accountNumber:'BY86PJCB30120998700000000', currency:'BYN', name:'Расчётный счёт',        balance:95230.45,  available:95230.45,  balanceUpdatedAt:nowIso(6) },
+      { id:4, bank:'priorbank',   accountNumber:'BY40PJCB30141EUR000000022', currency:'EUR', name:'Валютный счёт EUR',     balance:18740.00,  available:17920.00,  balanceUpdatedAt:nowIso(6) },
+      { id:5, bank:'belveb',      accountNumber:'BY33BELB30120ABCDE0000933', currency:'BYN', name:'Расчётный счёт',        balance:263110.90, available:263110.90, balanceUpdatedAt:nowIso(4) },
+      { id:6, bank:'belveb',      accountNumber:'BY77BELB30141RUB000000077', currency:'RUB', name:'Счёт в российских руб.', balance:1250000.00,available:1250000.00,balanceUpdatedAt:nowIso(4) },
+      { id:7, bank:'paritetbank', accountNumber:'BY52POIS30120557788000044', currency:'BYN', name:'Расчётный счёт',        balance:47820.33,  available:46500.00,  balanceUpdatedAt:nowIso(9) },
+      { id:8, bank:'paritetbank', accountNumber:'BY19POIS30140USD000000088', currency:'USD', name:'Валютный счёт USD',     balance:9300.00,   available:9300.00,   balanceUpdatedAt:nowIso(9) },
+    ];
+    const totals = [
+      { bank:'alfabank',  accountNumber:'BY24ALFA30120A45612000840', currency:'BYN', totalCredit:12480.00, totalDebit:3120.55 },
+      { bank:'belveb',    accountNumber:'BY33BELB30120ABCDE0000933', currency:'BYN', totalCredit:54000.00, totalDebit:18250.00 },
+      { bank:'priorbank', accountNumber:'BY86PJCB30120998700000000', currency:'BYN', totalCredit:0,        totalDebit:7640.20 },
+      { bank:'paritetbank',accountNumber:'BY52POIS30120557788000044',currency:'BYN', totalCredit:2300.00,  totalDebit:0 },
+    ];
+    const stmtAccounts = [
+      { bank:'alfabank',  accountNumber:'BY24ALFA30120A45612000840' },
+      { bank:'belveb',    accountNumber:'BY33BELB30120ABCDE0000933' },
+      { bank:'priorbank', accountNumber:'BY86PJCB30120998700000000' },
+    ];
+    const cps = [
+      ['ООО «Белтехноснаб»','190845712','Оплата по счёту №451 от 02.06.2026 за материалы'],
+      ['ЗАО «Промстройсервис»','100934221','Аванс по договору подряда 17/2026'],
+      ['ИП Ковалёв А.С.','391204556','Оплата транспортных услуг, акт №88'],
+      ['ОАО «Беларускалий»','600122487','Возврат излишне перечисленных средств'],
+      ['УП «ГорЭнергоСбыт»','190044112','Электроэнергия за май 2026'],
+      ['ООО «Логистик Плюс»','191556700','Доставка груза, заявка 2210'],
+      ['Налоговая инспекция','100000000','Налог на прибыль, 2 квартал'],
+      ['ООО «ОфисМаркет»','192887341','Канцтовары и расходные материалы'],
+    ];
+    const txByAcct = {};
+    for (const sa of stmtAccounts) {
+      const key = `${sa.bank}:${sa.accountNumber}`;
+      const list = [];
+      let ref = 4500;
+      for (let i = 0; i < 22; i++) {
+        const day = 5 - Math.floor(i / 3);
+        const d = new Date(2026, 5, Math.max(1, day));
+        const [name, unp, desc] = cps[i % cps.length];
+        const credit = i % 3 === 0;
+        const amt = Math.round((400 + Math.random() * 14000) * 100) / 100;
+        list.push({
+          id: 1000 + i, bank: sa.bank, accountNumber: sa.accountNumber,
+          transactionDate: d.toISOString().slice(0, 10),
+          reference: String(ref++),
+          description: desc,
+          debit: credit ? null : amt,
+          credit: credit ? amt : null,
+          currency: 'BYN',
+          counterpartyUnp: unp, counterpartyName: name,
+        });
+      }
+      txByAcct[key] = list;
+    }
+    return { accounts, totals, stmtAccounts, txByAcct };
+  }
+
+  function mockJson(obj, status = 200) {
+    return Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(obj) });
+  }
+  async function mockFetch(path, method, body) {
+    await sleep(200 + Math.random() * 250);
+    const [base, query] = path.split('?');
+    const params = new URLSearchParams(query || '');
+    if (base === '/api/accounts')           return mockJson({ accounts: DEMO.accounts, count: DEMO.accounts.length });
+    if (base === '/api/today-totals')        return mockJson({ totals: DEMO.totals, date: todayStr() });
+    if (base === '/api/statement-accounts')  return mockJson({ accounts: DEMO.stmtAccounts });
+    if (base === '/api/statements') {
+      const key = `${params.get('bank')}:${params.get('account')}`;
+      let txs = (DEMO.txByAcct[key] || []).slice();
+      const from = params.get('from'), to = params.get('to');
+      if (from) txs = txs.filter(t => t.transactionDate >= from);
+      if (to)   txs = txs.filter(t => t.transactionDate <= to);
+      return mockJson({ transactions: txs, count: txs.length });
+    }
+    if (base === '/api/refresh') {
+      for (const a of DEMO.accounts) {
+        a.balance = Math.round((a.balance + (Math.random() - 0.45) * 2000) * 100) / 100;
+        a.available = a.balance;
+        a.balanceUpdatedAt = new Date().toISOString();
+      }
+      return mockJson({ ok: true });
+    }
+    if (base === '/api/statements/refresh') return mockJson({ ok: true });
+    return mockJson({}, 404);
   }
 </script>
 </body>

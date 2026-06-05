@@ -41,17 +41,7 @@ export class BelvebAdapter implements BankAdapter {
   }
 
   async scrapeStatement(req: StatementRequest): Promise<ScrapedTransaction[]> {
-    try {
-      return await doScrapeStatement(this.activePage!, req);
-    } catch (err) {
-      const msg = (err as Error).message ?? '';
-      if (/session.?expired|SessionTimeout/i.test(msg)) {
-        logger.warn('[belveb] Session expired during statement scrape — re-logging in for immediate retry');
-        await this.login();
-        return doScrapeStatement(this.activePage!, req);
-      }
-      throw err;
-    }
+    return doScrapeStatement(this.activePage!, req);
   }
 
   async resetSession(): Promise<void> {

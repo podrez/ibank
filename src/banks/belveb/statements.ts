@@ -34,8 +34,21 @@ export async function scrapeStatement(
   await snap('01-vpsk-loaded');
 
   if (!page.url().includes('/Cabinet/')) {
-    logger.error('[belveb:stmt] Redirected away from Cabinet — session expired', { url: page.url() });
-    throw new Error(`[belveb:stmt] Session expired — redirected to ${page.url()}`);
+    // BIA portal rejects direct Vpsk access when the accounts portlet hasn't been
+    // initialized in the session yet (happens right after a fresh login / resetContext).
+    // Navigating back to /Cabinet/ with networkidle gives the portal time to set up
+    // the portlet state, after which the Vpsk URL succeeds on a second attempt.
+    logger.warn('[belveb:stmt] Vpsk redirected to non-Cabinet URL — refreshing portal state and retrying', { url: page.url() });
+    await page.goto(`${BASE_URL}/Cabinet/`, { waitUntil: 'networkidle', timeout: 25_000 });
+    await page.waitForTimeout(2_000);
+    await page.goto(vpskUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    await page.waitForTimeout(1_500);
+    await snap('01b-vpsk-retry');
+
+    if (!page.url().includes('/Cabinet/')) {
+      logger.error('[belveb:stmt] Redirected away from Cabinet — session expired', { url: page.url() });
+      throw new Error(`[belveb:stmt] Session expired — redirected to ${page.url()}`);
+    }
   }
 
   // 2. Wait for the Vpsk portlet form to finish loading
