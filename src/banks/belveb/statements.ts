@@ -127,15 +127,15 @@ export async function scrapeStatement(
     try {
       const [nextResponse] = await Promise.all([
         page.waitForResponse(
-          (r) => (r.url().includes('Vpsk/List') || r.url().includes('Vpsk/Index')) && r.request().method() === 'POST',
-          { timeout: 20_000 },
+          (r) => r.url().includes('Vpsk/List') || r.url().includes('Vpsk/Index'),
+          { timeout: 5_000 },
         ),
         nextBtn.click(),
       ]);
       pageHtml = await nextResponse.text();
       await page.waitForTimeout(500);
-    } catch (err) {
-      logger.warn(`[belveb:stmt] Page ${pageNum}: response timeout, trying DOM`, { err: String(err) });
+    } catch {
+      // Kendo Grid pager may use GET or a different URL — fall through to DOM scrape
       await page.waitForLoadState('networkidle').catch(() => null);
       await page.waitForTimeout(1_000);
     }
