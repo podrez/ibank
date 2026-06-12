@@ -483,6 +483,18 @@
     body.edit-mode .card.is-hidden .vis-btn { color: var(--accent); }
     body.edit-mode .link-btn { display: none; }
 
+    .stmt-btn { display: none; }
+    body.edit-mode .stmt-btn {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.78rem; font-weight: 600;
+      color: var(--muted); background: transparent;
+      border: none; cursor: pointer; padding: 0.2rem 0.1rem;
+      transition: color .15s;
+    }
+    body.edit-mode .stmt-btn:hover { color: var(--ink); }
+    body.edit-mode .stmt-btn.stmt-on { color: var(--accent); }
+    body.edit-mode .stmt-btn.stmt-on:hover { color: var(--accent-ink); }
+
     .edit-banner {
       display: none;
       align-items: center; gap: 0.6rem;
@@ -674,7 +686,7 @@
     /* ── responsive ─────────────────────────────────── */
     @media (max-width: 720px) {
       .topbar-sub, .topbar-sep { display: none; }
-      .countdown { display: none; }
+      .countdown { display: none !important; }
       .status-pill .status-txt { display: none; }
       #accounts-grid { grid-template-columns: 1fr; }
       .stmt-table col.col-ref, .stmt-table .col-ref-cell { display: none; }
@@ -802,6 +814,22 @@
       border-bottom: 1px solid var(--line);
     }
     .cfg-bank-header .bank-name { font-weight: 600; font-size: 0.875rem; flex: 1; }
+    .cfg-bank-header { cursor: pointer; user-select: none; }
+    .cfg-bank-chevron {
+      width: 16px; height: 16px; flex-shrink: 0;
+      color: var(--muted);
+      transition: transform .2s;
+    }
+    .cfg-bank-block.is-collapsed .cfg-bank-chevron { transform: rotate(-90deg); }
+    .cfg-bank-block.is-collapsed .cfg-bank-header { border-bottom: none; }
+    .cfg-bank-block.is-collapsed .cfg-bank-body { display: none; }
+    .cfg-bank-status-badge {
+      font-size: 0.72rem; font-family: var(--mono);
+      color: var(--faint);
+      background: var(--line-soft);
+      padding: 0.15rem 0.45rem; border-radius: 4px;
+    }
+    .cfg-bank-block:not(.is-collapsed) .cfg-bank-status-badge { display: none; }
     .cfg-bank-body { padding: 0.85rem 0.9rem; display: flex; flex-direction: column; gap: 0.65rem; }
     .cfg-field {
       display: flex; flex-direction: column; gap: 0.3rem;
@@ -890,13 +918,28 @@
     }
     #cfg-save-status.ok   { color: var(--pos); }
     #cfg-save-status.err  { color: var(--neg); }
-    .cfg-stmt-bank { margin-bottom: 1rem; }
-    .cfg-stmt-bank-title {
-      font-size: 0.8rem; font-weight: 600;
-      color: var(--muted); text-transform: uppercase;
-      letter-spacing: 0.07em; margin-bottom: 0.5rem;
+    .cfg-stmt-bank {
+      margin-bottom: 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
     }
-    .cfg-stmt-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .cfg-stmt-bank-title {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.875rem; font-weight: 600;
+      color: var(--ink);
+      padding: 0.55rem 0.75rem;
+      background: var(--surface-2);
+      cursor: pointer; user-select: none;
+    }
+    .cfg-stmt-chevron {
+      width: 14px; height: 14px; flex-shrink: 0;
+      color: var(--faint);
+      transition: transform .2s;
+    }
+    .cfg-stmt-bank.is-collapsed .cfg-stmt-chevron { transform: rotate(-90deg); }
+    .cfg-stmt-bank.is-collapsed .cfg-stmt-list { display: none; }
+    .cfg-stmt-list { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.65rem; }
     .cfg-stmt-item {
       display: flex; align-items: center; gap: 0.6rem;
       padding: 0.45rem 0.65rem;
@@ -1215,7 +1258,7 @@
       <div class="status-pill" id="status-pill">
         <span class="status-dot"></span>
         <span class="status-txt" id="status-bar"></span>
-        <span id="countdown-wrap" class="countdown" style="display:none">· <b id="countdown-val">30</b>с</span>
+        <span id="countdown-wrap" class="countdown" style="display:none">· <b id="countdown-val">30</b>&thinsp;с</span>
       </div>
       <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Сменить тему" aria-label="Сменить тему"></button>
       <button class="icon-btn" id="cfg-open-btn" onclick="openSettings()" title="Настройки сервиса" aria-label="Настройки сервиса">
@@ -1238,7 +1281,7 @@
   <main>
     <div class="edit-banner">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6.5v4M10 13.5h.01"/></svg>
-      <span>Режим настройки. Нажмите «Скрыть» под счётом, чтобы убрать его с дашборда. <b id="hidden-count-hint"></b></span>
+      <span>Режим настройки: управляйте видимостью счетов и включайте авто-загрузку выписок. <b id="hidden-count-hint"></b></span>
     </div>
 
     <section id="summary-section" style="display:none">
@@ -1477,6 +1520,33 @@
     renderAccounts(lastAccounts);
   }
 
+  async function toggleStatementAccount(bank, accountNumber) {
+    const key = `${bank}:${accountNumber}`;
+    if (statementAccountKeys.has(key)) statementAccountKeys.delete(key);
+    else statementAccountKeys.add(key);
+    renderAccounts(lastAccounts);
+    await saveStatementAccountsQuiet();
+  }
+
+  async function saveStatementAccountsQuiet() {
+    const bankIds = ['alfabank', 'priorbank', 'belveb', 'paritetbank'];
+    const payload = {};
+    for (const bankId of bankIds) {
+      const stmtKey = BANK_META[bankId]?.stmtKey;
+      if (!stmtKey) continue;
+      const prefix = bankId + ':';
+      payload[stmtKey] = [...statementAccountKeys]
+        .filter(k => k.startsWith(prefix))
+        .map(k => k.slice(prefix.length))
+        .join(',');
+    }
+    try {
+      await apiFetch('/api/settings', 'POST', undefined, payload);
+    } catch (err) {
+      console.error('Failed to save statement accounts', err);
+    }
+  }
+
   // ── Render: skeletons ────────────────────────────
   function renderSkeletons(n) {
     const grid = document.getElementById('accounts-grid');
@@ -1609,6 +1679,10 @@
             ${hasStmt ? `<button class="link-btn" onclick="openStatement('${esc(a.bank)}','${esc(a.accountNumber)}')">
               <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h5l3 3v8H3z"/><path d="M8 1.5v3h3M5 7.5h4M5 9.8h4"/></svg>
               Выписка</button>` : ''}
+            <button class="stmt-btn${hasStmt ? ' stmt-on' : ''}" onclick="toggleStatementAccount('${esc(a.bank)}','${esc(a.accountNumber)}')" title="${hasStmt ? 'Отключить авто-загрузку выписки' : 'Включить авто-загрузку выписки'}">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1.5h5l3 3v8H3z"/><path d="M8 1.5v3h3M5 7.5h4M5 9.8h4"/></svg>
+              ${hasStmt ? 'Авто-выписка' : 'Авто-выписка'}
+            </button>
             <button class="vis-btn" onclick="toggleAccountVisibility('${esc(key)}')">
               ${isHidden
                 ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8S3.8 3.5 8 3.5 14.5 8 14.5 8 12.2 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.9"/></svg> Показать`
@@ -2055,14 +2129,19 @@
   function buildBanksSection() {
     const container = document.getElementById('cfg-banks-list');
     container.innerHTML = '';
+    const savedCollapsed = JSON.parse(localStorage.getItem('bankCollapsed') || '{}');
     for (const [bankId, meta] of Object.entries(BANK_META)) {
       const loginVal = cfgOrig[meta.loginKey] || '';
       const pwIsSet  = cfgOrig[meta.pwKey] === '***';
+      const hasLogin = loginVal !== '';
+      const isCollapsed = bankId in savedCollapsed ? savedCollapsed[bankId] : true;
       const block = document.createElement('div');
-      block.className = 'cfg-bank-block';
+      block.className = 'cfg-bank-block' + (isCollapsed ? ' is-collapsed' : '');
       block.innerHTML = `
-        <div class="cfg-bank-header">
+        <div class="cfg-bank-header" onclick="toggleBankBlock(this, '${bankId}')">
           <span class="bank-name">${meta.label}</span>
+          ${!hasLogin ? '<span class="cfg-bank-status-badge">не настроен</span>' : ''}
+          <svg class="cfg-bank-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>
         </div>
         <div class="cfg-bank-body">
           <div class="cfg-field">
@@ -2092,6 +2171,22 @@
     }
   }
 
+  function toggleBankBlock(header, bankId) {
+    const block = header.closest('.cfg-bank-block');
+    const collapsed = block.classList.toggle('is-collapsed');
+    const saved = JSON.parse(localStorage.getItem('bankCollapsed') || '{}');
+    saved[bankId] = collapsed;
+    localStorage.setItem('bankCollapsed', JSON.stringify(saved));
+  }
+
+  function toggleStmtBank(title, bankId) {
+    const block = title.closest('.cfg-stmt-bank');
+    const collapsed = block.classList.toggle('is-collapsed');
+    const saved = JSON.parse(localStorage.getItem('stmtBankCollapsed') || '{}');
+    saved[bankId] = collapsed;
+    localStorage.setItem('stmtBankCollapsed', JSON.stringify(saved));
+  }
+
   function populateStmtAccounts() {
     const container = document.getElementById('cfg-stmt-accounts');
     container.innerHTML = '';
@@ -2105,11 +2200,16 @@
       const list = byBank[bankId];
       if (!list || list.length === 0) continue;
       any = true;
+      const savedStmt = JSON.parse(localStorage.getItem('stmtBankCollapsed') || '{}');
+      const isCollapsed = bankId in savedStmt ? savedStmt[bankId] : true;
       const group = document.createElement('div');
-      group.className = 'cfg-stmt-bank';
+      group.className = 'cfg-stmt-bank' + (isCollapsed ? ' is-collapsed' : '');
       group.dataset.bankId = bankId;
       const bankLabel = BANK_META[bankId]?.label || bankId;
-      group.innerHTML = `<div class="cfg-stmt-bank-title">${escHtml(bankLabel)}</div>
+      group.innerHTML = `<div class="cfg-stmt-bank-title" onclick="toggleStmtBank(this, '${bankId}')">
+          ${escHtml(bankLabel)}
+          <svg class="cfg-stmt-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>
+        </div>
         <div class="cfg-stmt-list" data-stmt-bank="${escHtml(bankId)}"></div>`;
       const ul = group.querySelector('.cfg-stmt-list');
       for (const acc of list) {
