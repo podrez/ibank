@@ -775,6 +775,7 @@
       transition: background .15s, color .15s;
       white-space: nowrap;
     }
+    .cfg-nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
     .cfg-nav-item:hover { background: var(--line-soft); color: var(--ink); }
     .cfg-nav-item.is-active { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
     .cfg-content {
@@ -1994,20 +1995,34 @@
 
   // ── Load settings ─────────────────────────────────
   async function loadSettingsData() {
-    try {
-      const [cfgRes, acctRes] = await Promise.all([
-        apiFetch('/api/settings'),
-        apiFetch('/api/settings/accounts'),
-      ]);
-      if (!cfgRes.ok || !acctRes.ok) throw new Error('HTTP ' + cfgRes.status);
-      const cfgJson  = await cfgRes.json();
-      const acctJson = await acctRes.json();
-      cfgOrig = cfgJson;
-      cfgAccounts = acctJson.accounts || [];
-      populateSettings();
-      populateStmtAccounts();
-    } catch (err) {
-      console.error('Settings load error', err);
+    const [cfgRes, acctRes] = await Promise.allSettled([
+      apiFetch('/api/settings'),
+      apiFetch('/api/settings/accounts'),
+    ]);
+
+    if (cfgRes.status === 'fulfilled' && cfgRes.value.ok) {
+      try {
+        cfgOrig = await cfgRes.value.json();
+        populateSettings();
+      } catch (err) {
+        console.error('Settings load error (cfg)', err);
+      }
+    } else {
+      console.error('Settings fetch failed', cfgRes.status === 'rejected' ? cfgRes.reason : cfgRes.value.status);
+    }
+
+    if (acctRes.status === 'fulfilled' && acctRes.value.ok) {
+      try {
+        const acctJson = await acctRes.value.json();
+        cfgAccounts = acctJson.accounts || [];
+        populateStmtAccounts();
+      } catch (err) {
+        console.error('Settings load error (accounts)', err);
+        document.getElementById('cfg-stmt-accounts').innerHTML = '<div class="cfg-empty">Ошибка загрузки счетов.</div>';
+      }
+    } else {
+      console.error('Accounts fetch failed', acctRes.status === 'rejected' ? acctRes.reason : acctRes.value.status);
+      document.getElementById('cfg-stmt-accounts').innerHTML = '<div class="cfg-empty">Ошибка загрузки счетов.</div>';
     }
   }
 
@@ -2102,7 +2117,7 @@
         item.className = 'cfg-stmt-item';
         item.innerHTML = `
           <input type="checkbox" data-stmt-acc="${escHtml(acc.accountNumber)}" ${acc.statementEnabled ? 'checked' : ''}>
-          <span class="stmt-acc-num">${fmtAcct(acc.accountNumber)}</span>
+          <span class="stmt-acc-num">${fmtAccountNumber(acc.accountNumber)}</span>
           <span class="stmt-acc-cur">${escHtml(acc.currency)}</span>
           ${acc.name ? `<span class="stmt-acc-name">${escHtml(acc.name)}</span>` : ''}`;
         ul.appendChild(item);
