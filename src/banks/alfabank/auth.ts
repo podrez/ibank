@@ -2,6 +2,7 @@ import { Page, Locator } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
 import { saveDebugSnapshot } from '../../utils/debug';
+import { getConfig } from '../../config/store';
 
 const BANK_ID = 'alfabank';
 const BASE_URL = 'https://online.alfabank.by';
@@ -30,17 +31,17 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 }
 
 export async function login(): Promise<Page> {
-  const bankLogin = process.env.ALFABANK_LOGIN ?? process.env.BANK_LOGIN;
-  const bankPassword = process.env.ALFABANK_PASSWORD ?? process.env.BANK_PASSWORD;
+  const bankLogin = getConfig('ALFABANK_LOGIN') ?? getConfig('BANK_LOGIN');
+  const bankPassword = getConfig('ALFABANK_PASSWORD') ?? getConfig('BANK_PASSWORD');
 
   if (!bankLogin || !bankPassword) {
-    throw new Error('ALFABANK_LOGIN and ALFABANK_PASSWORD must be set in environment variables');
+    throw new Error('ALFABANK_LOGIN and ALFABANK_PASSWORD must be set');
   }
 
   const ctx = await getBrowserContext(BANK_ID);
   const page = await ctx.newPage();
 
-  if (process.env.DEBUG_SCREENSHOTS === 'true') {
+  if (getConfig('DEBUG_SCREENSHOTS') === 'true') {
     page.on('request', (req) => {
       if (req.method() === 'POST') logger.debug(`[alfabank] → POST ${req.url()}`);
     });

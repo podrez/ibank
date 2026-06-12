@@ -1,7 +1,8 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { ScrapedAccount } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
+import { getConfig } from '../../config/store';
 
 /**
  * Scrape account balances from the Alfa-Bank dashboard.
@@ -104,7 +105,7 @@ async function domScrape(page: Page): Promise<ScrapedAccount[]> {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(2000);
 
-  if (process.env.DEBUG_SCREENSHOTS === 'true') {
+  if (getConfig('DEBUG_SCREENSHOTS') === 'true') {
     const dir = './data/debug';
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(`${dir}/alfabank-dashboard.html`, await page.content());

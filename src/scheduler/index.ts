@@ -2,32 +2,33 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { syncAllBanks, syncBankBalances, syncAllStatements } from '../scraper';
 import { getEnabledBanks, BankAdapter } from '../banks';
 import { logger } from '../logger';
-
-const START_HOUR = parseInt(process.env.SCHEDULE_START_HOUR ?? '9');
-const END_HOUR = parseInt(process.env.SCHEDULE_END_HOUR ?? '17');
-const INTERVAL = parseInt(process.env.SCHEDULE_INTERVAL_MINUTES ?? '5');
-const APP_TIMEZONE = process.env.APP_TIMEZONE ?? 'Europe/Minsk';
-
-// Comma-separated dates (YYYY-MM-DD) that are working days despite being Sat/Sun.
-// Example: EXTRA_WORKING_DAYS=2026-04-25,2026-11-07
-const EXTRA_WORKING_DAYS: Set<string> = new Set(
-  (process.env.EXTRA_WORKING_DAYS ?? '')
-    .split(',')
-    .map((d) => d.trim())
-    .filter(Boolean)
-);
+import { getConfig } from '../config/store';
 
 let syncTask: ScheduledTask | null = null;
 let isSyncing = false;
 
+function getStartHour(): number { return parseInt(getConfig('SCHEDULE_START_HOUR') ?? '9'); }
+function getEndHour(): number   { return parseInt(getConfig('SCHEDULE_END_HOUR') ?? '17'); }
+function getInterval(): number  { return parseInt(getConfig('SCHEDULE_INTERVAL_MINUTES') ?? '5'); }
+function getTimezone(): string  { return getConfig('APP_TIMEZONE') ?? 'Europe/Minsk'; }
+
+function getExtraWorkingDays(): Set<string> {
+  return new Set(
+    (getConfig('EXTRA_WORKING_DAYS') ?? '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean),
+  );
+}
+
 function todayLocal(): string {
-  return new Intl.DateTimeFormat('sv', { timeZone: APP_TIMEZONE }).format(new Date());
+  return new Intl.DateTimeFormat('sv', { timeZone: getTimezone() }).format(new Date());
 }
 
 function isWorkingDay(): boolean {
   const today = todayLocal();
-  if (EXTRA_WORKING_DAYS.has(today)) return true;
-  const dow = new Date(today).getUTCDay(); // date parsed as UTC midnight → getUTCDay is correct
+  if (getExtraWorkingDays().has(today)) return true;
+  const dow = new Date(today).getUTCDay();
   return dow >= 1 && dow <= 5;
 }
 
@@ -37,12 +38,18 @@ function isWorkingDay(): boolean {
  * happens inside the callback so Saturdays run only when listed in EXTRA_WORKING_DAYS.
  */
 export function startScheduler(): void {
+  const startHour = getStartHour();
+  const endHour   = getEndHour();
+  const interval  = getInterval();
+  const timezone  = getTimezone();
+  const extraDays = getExtraWorkingDays();
+
   // END_HOUR-1: cron range is inclusive — last tick at (END_HOUR-1):xx, not at END_HOUR:00.
-  const cronExpr = `*/${INTERVAL} ${START_HOUR}-${END_HOUR - 1} * * 0-6`;
+  const cronExpr = `*/${interval} ${startHour}-${endHour - 1} * * 0-6`;
   logger.info('Starting scheduler', {
     cronExpr,
-    timezone: APP_TIMEZONE,
-    schedule: `Mon–Fri ${START_HOUR}:00–${END_HOUR}:00 ${APP_TIMEZONE}, every ${INTERVAL} min (+ extra working days: ${[...EXTRA_WORKING_DAYS].join(', ') || 'none'})`,
+    timezone,
+    schedule: `Mon–Fri ${startHour}:00–${endHour}:00 ${timezone}, every ${interval} min (+ extra working days: ${[...extraDays].join(', ') || 'none'})`,
   });
 
   syncTask = cron.schedule(
@@ -51,7 +58,7 @@ export function startScheduler(): void {
       if (!isWorkingDay()) return;
       runSync();
     },
-    { timezone: APP_TIMEZONE },
+    { timezone },
   );
   syncTask.start();
 
@@ -70,8 +77,8 @@ export function stopScheduler(): void {
 }
 
 function isWorkingHour(): boolean {
-  const hour = parseInt(new Intl.DateTimeFormat('en', { timeZone: APP_TIMEZONE, hour: 'numeric', hour12: false }).format(new Date()));
-  return hour >= START_HOUR && hour < END_HOUR;
+  const hour = parseInt(new Intl.DateTimeFormat('en', { timeZone: getTimezone(), hour: 'numeric', hour12: false }).format(new Date()));
+  return hour >= getStartHour() && hour < getEndHour();
 }
 
 /**

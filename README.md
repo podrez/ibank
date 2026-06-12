@@ -52,14 +52,26 @@ A built-in dashboard is served at `http://localhost:3000/`.
 - **Account cards** — show bank name, account number, currency, current balance, the time the balance was last scraped, and today's credit/debit totals.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
-- **Visibility toggle** — the "Настроить" button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
-- **Statement viewer** — accounts listed in `*_STATEMENT_ACCOUNTS` env vars show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
+- **Visibility toggle** — the gear button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
+- **Statement viewer** — accounts enabled for statement sync show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
+- **Settings panel** — the sliders button in the header opens a settings modal with sections:
+  - **Банки** — credentials (login/password) for each bank; a bank becomes enabled as soon as its login is saved.
+  - **Выписки** — checkboxes over all scraped accounts; toggling an account adds or removes it from automatic statement sync.
+  - **Расписание** — start/end hours, interval, timezone, extra working days.
+  - **REST API** — API key rotation (requires re-login after change); API port is shown read-only.
+  - **1С** — webhook URL and credentials.
+  - **Браузер** — headless mode, timeout, custom Chromium path.
+  - **Отладка** — debug screenshots toggle, log level.
+
+Settings saved via the UI are persisted to the `settings` table in SQLite and take effect immediately (scheduler restarts, browser re-launches, bank sessions are reset as needed). Environment variables in `.env` act as fallback defaults when a setting has not been saved through the UI.
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
 ## Environment variables
 
-A bank is **enabled** when its `LOGIN` env var is set. Leave it empty to disable that bank.
+A bank is **enabled** when its `LOGIN` env var (or the corresponding setting saved via the UI) is set.
+
+`DB_PATH` and `API_PORT` can only be set via `.env` / environment (they require a process restart to take effect). All other variables can also be changed at runtime through the Settings panel in the web UI.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -114,7 +126,10 @@ All endpoints (except `/health`) require authentication via one of:
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
 | GET | `/api/today-totals` | Today's credit/debit totals per account (grouped by bank, account, currency) |
-| GET | `/api/statement-accounts` | List of accounts configured for statement syncing (from env vars) |
+| GET | `/api/statement-accounts` | Accounts currently configured for statement syncing |
+| GET | `/api/settings` | All configurable settings (sensitive values masked as `***`) |
+| POST | `/api/settings` | Save settings; `***` = keep existing value, `""` = clear |
+| GET | `/api/settings/accounts` | All scraped accounts with `statementEnabled` flag |
 | GET | `/health` | Health check (no auth required) |
 
 ### Example: GET /api/accounts
@@ -191,11 +206,13 @@ Scheduler (node-cron)
                           └─► notify/onec.ts — POST to 1C webhook on new imports
 ```
 
+Configuration is read from `config/store.ts` (DB-backed key-value cache, falls back to `process.env`). All runtime settings except `DB_PATH` and `API_PORT` can be updated via `POST /api/settings` without restarting the process.
+
 Each bank adapter uses the strategy best suited to that bank's web application:
 
 - **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback
-- **БелВЭБ** — direct AJAX portlet fetch (`/Vpsk/List`), with Kendo Grid DOM scraping as fallback
-- **Паритетбанк** — direct REST API calls (`/corporate/web-api/v1/`) via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
+- **БелВЭБ** — direct AJAX portlet fetch, with Kendo Grid DOM scraping as fallback
+- **Паритетбанк** — direct REST API calls via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
 
 Statement scraping stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
 
@@ -213,7 +230,7 @@ npm run db:studio    # Open Drizzle Studio (DB browser)
 
 ## Debugging the scraper
 
-Set `DEBUG_SCREENSHOTS=true` in `.env`, trigger a sync, then inspect the saved files in `./data/debug/`:
+Set `DEBUG_SCREENSHOTS=true` via `.env` or the Settings panel, trigger a sync, then inspect `./data/debug/`:
 
 | Bank | Balance debug files | Statement debug files |
 |---|---|---|
@@ -248,5 +265,6 @@ Notification failures are logged as warnings and do not interrupt the sync.
 2. Create `src/banks/<bankid>/accounts.ts` — `scrapeAccounts(page): Promise<ScrapedAccount[]>`
 3. Create `src/banks/<bankid>/statements.ts` — `scrapeStatement(page, req): Promise<ScrapedTransaction[]>` (optional)
 4. Create `src/banks/<bankid>/index.ts` — class implementing `BankAdapter`
-5. Register in `src/banks/index.ts` under a new env var (e.g. `NEWBANK_LOGIN`)
-6. Add theming in `public/index.html`: CSS classes `.bank-<id>` and `.bank-card-<id>`, and entries in `bankLabel()` and `bankIcon()`
+5. Register in `src/banks/index.ts` under a new env var (e.g. `NEWBANK_LOGIN`) using `getConfig()`
+6. Add the new credential keys to `ALL_SETTING_KEYS` in `src/config/store.ts` and to `BANK_META` in `public/index.html`
+7. Add theming in `public/index.html`: CSS classes `.bank-<id>` and `.bank-card-<id>`, and entries in `bankLabel()` and `bankIcon()`

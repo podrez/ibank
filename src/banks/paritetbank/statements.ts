@@ -1,9 +1,10 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
 import { parseDate, isoToDMY } from '../../utils/dates';
 import { makeSnapper } from '../../utils/debug';
+import { getConfig } from '../../config/store';
 
 const API_BASE = '/corporate/web-api/v1';
 const DEBUG_DIR = './data/debug';
@@ -69,7 +70,7 @@ export async function scrapeStatement(
     },
   );
 
-  if (process.env.DEBUG_SCREENSHOTS === 'true') {
+  if (getConfig('DEBUG_SCREENSHOTS') === 'true') {
     if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
     const safe = req.accountNumber.replace(/[^A-Z0-9]/gi, '_');
     fs.writeFileSync(

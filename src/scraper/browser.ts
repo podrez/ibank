@@ -1,12 +1,18 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
 import { logger } from '../logger';
+import { getConfig } from '../config/store';
 
 let browser: Browser | null = null;
 const contexts = new Map<string, BrowserContext>();
 let launchPromise: Promise<Browser> | null = null;
 
-const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT_MS ?? '') || 30_000;
-const HEADLESS = process.env.HEADLESS !== 'false';
+function getTimeout(): number {
+  return parseInt(getConfig('BROWSER_TIMEOUT_MS') ?? '') || 30_000;
+}
+
+function isHeadless(): boolean {
+  return getConfig('HEADLESS') !== 'false';
+}
 
 async function ensureBrowser(): Promise<Browser> {
   if (browser?.isConnected()) return browser;
@@ -21,11 +27,11 @@ async function ensureBrowser(): Promise<Browser> {
     }
     contexts.clear();
 
-    const executablePath = process.env.CHROMIUM_EXECUTABLE_PATH || undefined;
+    const executablePath = getConfig('CHROMIUM_EXECUTABLE_PATH') || undefined;
     if (executablePath) logger.info(`Using custom Chromium executable: ${executablePath}`);
     logger.info('Launching Chromium browser');
     const b = await chromium.launch({
-      headless: HEADLESS,
+      headless: isHeadless(),
       executablePath,
       args: [
         '--no-sandbox',
@@ -52,9 +58,9 @@ export async function getBrowserContext(bankId: string): Promise<BrowserContext>
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'ru-RU',
-      timezoneId: process.env.APP_TIMEZONE ?? 'Europe/Minsk',
+      timezoneId: getConfig('APP_TIMEZONE') ?? 'Europe/Minsk',
     });
-    ctx.setDefaultTimeout(TIMEOUT);
+    ctx.setDefaultTimeout(getTimeout());
     contexts.set(bankId, ctx);
     logger.debug(`Browser context created for bank: ${bankId}`);
   }
@@ -82,5 +88,12 @@ export async function closeBrowser(): Promise<void> {
     await browser.close().catch(() => null);
     browser = null;
     logger.info('Browser closed');
+  }
+}
+
+/** Close browser if running, so next sync re-launches with fresh settings. */
+export async function closeBrowserIfOpen(): Promise<void> {
+  if (browser?.isConnected()) {
+    await closeBrowser();
   }
 }

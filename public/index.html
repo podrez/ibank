@@ -727,6 +727,196 @@
     @media (prefers-reduced-motion: reduce) {
       * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
     }
+
+    /* ════════════════════ SETTINGS MODAL ════════════ */
+    #cfg-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 100;
+      align-items: center; justify-content: center;
+      padding: 1.5rem;
+      backdrop-filter: blur(4px);
+    }
+    #cfg-overlay.is-open { display: flex; }
+    #cfg-modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      width: 100%; max-width: 820px;
+      max-height: calc(100vh - 3rem);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .cfg-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.1rem 1.4rem;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .cfg-head h2 { font-size: 1rem; font-weight: 600; }
+    .cfg-body {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    .cfg-nav {
+      display: flex; flex-direction: column;
+      width: 155px; flex-shrink: 0;
+      border-right: 1px solid var(--line);
+      padding: 0.75rem 0.5rem;
+      gap: 0.2rem; overflow-y: auto;
+    }
+    .cfg-nav-item {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.55rem 0.75rem;
+      border: none; background: none; cursor: pointer;
+      border-radius: var(--radius-sm);
+      text-align: left; font-size: 0.875rem;
+      color: var(--ink-2); font-family: var(--sans);
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+    .cfg-nav-item:hover { background: var(--line-soft); color: var(--ink); }
+    .cfg-nav-item.is-active { background: var(--accent-wash); color: var(--accent); font-weight: 600; }
+    .cfg-content {
+      flex: 1; overflow-y: auto;
+      padding: 1.4rem;
+    }
+    .cfg-section { display: none; }
+    .cfg-section.is-active { display: block; }
+    .cfg-section h3 {
+      font-size: 0.8rem; font-weight: 600; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--faint);
+      margin-bottom: 1rem;
+    }
+    .cfg-bank-block {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .cfg-bank-header {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.7rem 0.9rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line);
+    }
+    .cfg-bank-header .bank-name { font-weight: 600; font-size: 0.875rem; flex: 1; }
+    .cfg-bank-body { padding: 0.85rem 0.9rem; display: flex; flex-direction: column; gap: 0.65rem; }
+    .cfg-field {
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    .cfg-field label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+    .cfg-field input[type="text"],
+    .cfg-field input[type="password"],
+    .cfg-field input[type="number"],
+    .cfg-field textarea,
+    .cfg-field select {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--sans); font-size: 0.875rem;
+      transition: border-color .15s;
+      outline: none;
+    }
+    .cfg-field input:focus,
+    .cfg-field textarea:focus,
+    .cfg-field select:focus { border-color: var(--accent); }
+    .cfg-field textarea { resize: vertical; min-height: 70px; }
+    .cfg-pw-wrap { position: relative; }
+    .cfg-pw-wrap input { padding-right: 2.6rem; }
+    .cfg-pw-wrap .pw-toggle {
+      position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+      border: none; background: none; cursor: pointer; color: var(--muted);
+      padding: 0.25rem; display: flex; align-items: center;
+    }
+    .cfg-pw-wrap .pw-toggle:hover { color: var(--ink); }
+    .cfg-pw-wrap .pw-toggle svg { width: 16px; height: 16px; }
+    .cfg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .cfg-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+    .cfg-toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.6rem 0;
+    }
+    .cfg-toggle-row label { font-size: 0.875rem; color: var(--ink-2); }
+    .cfg-toggle {
+      position: relative; width: 38px; height: 22px;
+      display: inline-block; flex-shrink: 0;
+    }
+    .cfg-toggle input { opacity: 0; width: 0; height: 0; }
+    .cfg-toggle-track {
+      position: absolute; inset: 0;
+      background: var(--line);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .cfg-toggle input:checked + .cfg-toggle-track { background: var(--accent); }
+    .cfg-toggle-track::after {
+      content: '';
+      position: absolute; left: 3px; top: 3px;
+      width: 16px; height: 16px;
+      border-radius: 50%; background: white;
+      transition: transform .2s;
+    }
+    .cfg-toggle input:checked + .cfg-toggle-track::after { transform: translateX(16px); }
+    .cfg-info-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      background: var(--surface-2); border-radius: var(--radius-sm);
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .cfg-info-row strong { color: var(--ink-2); font-family: var(--mono); font-size: 0.8rem; }
+    .cfg-warn {
+      padding: 0.6rem 0.85rem;
+      background: color-mix(in oklab, var(--neg-wash) 60%, transparent);
+      border: 1px solid color-mix(in oklab, var(--neg) 25%, transparent);
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem; color: var(--neg);
+      margin-bottom: 0.75rem;
+    }
+    .cfg-foot {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0.9rem 1.4rem;
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    #cfg-save-status {
+      font-size: 0.875rem;
+      transition: opacity .3s;
+    }
+    #cfg-save-status.ok   { color: var(--pos); }
+    #cfg-save-status.err  { color: var(--neg); }
+    .cfg-stmt-bank { margin-bottom: 1rem; }
+    .cfg-stmt-bank-title {
+      font-size: 0.8rem; font-weight: 600;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.07em; margin-bottom: 0.5rem;
+    }
+    .cfg-stmt-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .cfg-stmt-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.45rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .cfg-stmt-item:hover { background: var(--surface-2); }
+    .cfg-stmt-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+    .cfg-stmt-item .stmt-acc-num { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); flex: 1; }
+    .cfg-stmt-item .stmt-acc-cur { font-size: 0.75rem; color: var(--muted); background: var(--line-soft); padding: 0.1rem 0.4rem; border-radius: 4px; }
+    .cfg-stmt-item .stmt-acc-name { font-size: 0.78rem; color: var(--muted); }
+    .cfg-empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
+    @media (max-width: 600px) {
+      #cfg-overlay { padding: 0; }
+      #cfg-modal { border-radius: 0; max-height: 100vh; }
+      .cfg-body { flex-direction: column; }
+      .cfg-nav { flex-direction: row; width: 100%; border-right: none; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: visible; padding: 0.4rem; }
+      .cfg-row, .cfg-row-3 { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -806,6 +996,202 @@
   </div>
 </div>
 
+<!-- ════════════════════ SETTINGS MODAL ════════════ -->
+<div id="cfg-overlay" onclick="cfgOverlayClick(event)">
+  <div id="cfg-modal" role="dialog" aria-modal="true" aria-label="Настройки">
+    <div class="cfg-head">
+      <h2>Настройки сервиса</h2>
+      <button class="icon-btn" onclick="closeSettings()" title="Закрыть (Esc)" aria-label="Закрыть">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+    <div class="cfg-body">
+      <nav class="cfg-nav" id="cfg-nav">
+        <button class="cfg-nav-item is-active" data-section="banks">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1.5" y="6" width="13" height="8.5" rx="1.5"/><path d="M8 1.5L1.5 5.5h13L8 1.5z"/></svg>
+          Банки
+        </button>
+        <button class="cfg-nav-item" data-section="statements">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>
+          Выписки
+        </button>
+        <button class="cfg-nav-item" data-section="schedule">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 4.5v3.5l2 2"/></svg>
+          Расписание
+        </button>
+        <button class="cfg-nav-item" data-section="api">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M11 4a2 2 0 110 4M11 4a2 2 0 010 4M3 8h8M5 6H3a2 2 0 100 4h2"/></svg>
+          REST API
+        </button>
+        <button class="cfg-nav-item" data-section="onec">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13 2.5l-10 4 4 2 2 4 4-10z"/></svg>
+          1С
+        </button>
+        <button class="cfg-nav-item" data-section="browser">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 6.5h13"/><circle cx="4" cy="4.75" r=".75" fill="currentColor" stroke="none"/><circle cx="7" cy="4.75" r=".75" fill="currentColor" stroke="none"/></svg>
+          Браузер
+        </button>
+        <button class="cfg-nav-item" data-section="debug">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 3l2 2 2-2"/><rect x="4" y="5" width="8" height="8" rx="1.5"/><path d="M2 8h2M12 8h2M4.5 13l-2 2M11.5 13l2 2"/></svg>
+          Отладка
+        </button>
+      </nav>
+      <div class="cfg-content">
+
+        <!-- ── Банки ── -->
+        <div class="cfg-section is-active" id="cfg-sec-banks">
+          <h3>Учётные данные банков</h3>
+          <div id="cfg-banks-list">
+            <div class="cfg-empty">Загрузка…</div>
+          </div>
+        </div>
+
+        <!-- ── Выписки ── -->
+        <div class="cfg-section" id="cfg-sec-statements">
+          <h3>Автоматическая загрузка выписок</h3>
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">
+            Отмеченные счета включаются в плановую синхронизацию выписок.
+            Ручная загрузка через кнопку «Обновить из банка» доступна всегда.
+          </p>
+          <div id="cfg-stmt-accounts">
+            <div class="cfg-empty">Загрузка…</div>
+          </div>
+        </div>
+
+        <!-- ── Расписание ── -->
+        <div class="cfg-section" id="cfg-sec-schedule">
+          <h3>Расписание синхронизации</h3>
+          <div class="cfg-row" style="margin-bottom:.75rem">
+            <div class="cfg-field">
+              <label>Начало рабочего дня (час)</label>
+              <input type="number" min="0" max="23" data-cfg-key="SCHEDULE_START_HOUR" placeholder="9">
+            </div>
+            <div class="cfg-field">
+              <label>Конец рабочего дня (час)</label>
+              <input type="number" min="1" max="24" data-cfg-key="SCHEDULE_END_HOUR" placeholder="17">
+            </div>
+          </div>
+          <div class="cfg-field" style="margin-bottom:.75rem">
+            <label>Интервал синхронизации (минуты)</label>
+            <input type="number" min="1" max="60" data-cfg-key="SCHEDULE_INTERVAL_MINUTES" placeholder="5">
+          </div>
+          <div class="cfg-field" style="margin-bottom:.75rem">
+            <label>Часовой пояс (IANA, например Europe/Minsk)</label>
+            <input type="text" data-cfg-key="APP_TIMEZONE" placeholder="Europe/Minsk">
+          </div>
+          <div class="cfg-field">
+            <label>Дополнительные рабочие дни (Сб/Вс, YYYY-MM-DD через запятую)</label>
+            <textarea data-cfg-key="EXTRA_WORKING_DAYS" placeholder="2026-04-25,2026-11-07"></textarea>
+          </div>
+        </div>
+
+        <!-- ── REST API ── -->
+        <div class="cfg-section" id="cfg-sec-api">
+          <h3>REST API</h3>
+          <div class="cfg-warn" id="cfg-api-warn" style="display:none">
+            Изменение API-ключа завершит текущую сессию — потребуется повторная авторизация с новым ключом.
+          </div>
+          <div class="cfg-field" style="margin-bottom:.75rem">
+            <label>API-ключ доступа</label>
+            <div class="cfg-pw-wrap">
+              <input type="password" data-cfg-key="API_KEY" placeholder="Не задан" autocomplete="new-password">
+              <button type="button" class="pw-toggle" onclick="togglePw(this)" title="Показать/скрыть">
+                <svg class="eye-show" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>
+                <svg class="eye-hide" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M3 3l14 14M10 4C5.6 4 2 10 2 10s1 1.6 2.7 3M17.3 7A14.4 14.4 0 0118 10s-3.6 6-8 6a6.5 6.5 0 01-3.3-.9"/><circle cx="10" cy="10" r="2.5"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="cfg-info-row">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="14" height="14"><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5.5h.01"/></svg>
+            <span>Порт: <strong id="cfg-port-val">3000</strong> — изменяется только через переменную среды <strong>API_PORT</strong></span>
+          </div>
+        </div>
+
+        <!-- ── 1С ── -->
+        <div class="cfg-section" id="cfg-sec-onec">
+          <h3>Уведомления в 1С</h3>
+          <div class="cfg-field" style="margin-bottom:.75rem">
+            <label>URL вебхука (оставьте пустым для отключения)</label>
+            <input type="text" data-cfg-key="ONEC_WEBHOOK_URL" placeholder="https://…">
+          </div>
+          <div class="cfg-row" style="margin-bottom:.75rem">
+            <div class="cfg-field">
+              <label>Имя пользователя</label>
+              <input type="text" data-cfg-key="ONEC_USERNAME" placeholder="">
+            </div>
+            <div class="cfg-field">
+              <label>Пароль</label>
+              <div class="cfg-pw-wrap">
+                <input type="password" data-cfg-key="ONEC_PASSWORD" placeholder="Не задан" autocomplete="new-password">
+                <button type="button" class="pw-toggle" onclick="togglePw(this)" title="Показать/скрыть">
+                  <svg class="eye-show" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>
+                  <svg class="eye-hide" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M3 3l14 14M10 4C5.6 4 2 10 2 10s1 1.6 2.7 3M17.3 7A14.4 14.4 0 0118 10s-3.6 6-8 6a6.5 6.5 0 01-3.3-.9"/><circle cx="10" cy="10" r="2.5"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="cfg-field">
+            <label>API-ключ 1С</label>
+            <div class="cfg-pw-wrap">
+              <input type="password" data-cfg-key="ONEC_API_KEY" placeholder="Не задан" autocomplete="new-password">
+              <button type="button" class="pw-toggle" onclick="togglePw(this)" title="Показать/скрыть">
+                <svg class="eye-show" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>
+                <svg class="eye-hide" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M3 3l14 14M10 4C5.6 4 2 10 2 10s1 1.6 2.7 3M17.3 7A14.4 14.4 0 0118 10s-3.6 6-8 6a6.5 6.5 0 01-3.3-.9"/><circle cx="10" cy="10" r="2.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Браузер ── -->
+        <div class="cfg-section" id="cfg-sec-browser">
+          <h3>Настройки браузера Playwright</h3>
+          <div class="cfg-toggle-row" style="margin-bottom:.75rem">
+            <label>Скрытый режим (headless)</label>
+            <label class="cfg-toggle">
+              <input type="checkbox" data-cfg-key="HEADLESS" data-cfg-type="bool">
+              <span class="cfg-toggle-track"></span>
+            </label>
+          </div>
+          <div class="cfg-field" style="margin-bottom:.75rem">
+            <label>Таймаут браузера (мс)</label>
+            <input type="number" min="5000" max="120000" step="1000" data-cfg-key="BROWSER_TIMEOUT_MS" placeholder="30000">
+          </div>
+          <div class="cfg-field">
+            <label>Путь к Chromium (оставьте пустым для встроенного)</label>
+            <input type="text" data-cfg-key="CHROMIUM_EXECUTABLE_PATH" placeholder="/usr/bin/chromium-browser">
+          </div>
+        </div>
+
+        <!-- ── Отладка ── -->
+        <div class="cfg-section" id="cfg-sec-debug">
+          <h3>Отладка</h3>
+          <div class="cfg-toggle-row" style="margin-bottom:.75rem">
+            <label>Сохранять скриншоты и HTML при ошибках</label>
+            <label class="cfg-toggle">
+              <input type="checkbox" data-cfg-key="DEBUG_SCREENSHOTS" data-cfg-type="bool">
+              <span class="cfg-toggle-track"></span>
+            </label>
+          </div>
+          <div class="cfg-field">
+            <label>Уровень логирования</label>
+            <select data-cfg-key="LOG_LEVEL">
+              <option value="debug">debug</option>
+              <option value="info">info</option>
+              <option value="warn">warn</option>
+              <option value="error">error</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="cfg-foot">
+      <button class="btn btn-primary" id="cfg-save-btn" onclick="saveSettings()">Сохранить</button>
+      <span id="cfg-save-status"></span>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════════ DASHBOARD ═════════════════ -->
 <div id="dashboard">
   <header class="topbar">
@@ -831,6 +1217,9 @@
         <span id="countdown-wrap" class="countdown" style="display:none">· <b id="countdown-val">30</b>с</span>
       </div>
       <button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Сменить тему" aria-label="Сменить тему"></button>
+      <button class="icon-btn" id="cfg-open-btn" onclick="openSettings()" title="Настройки сервиса" aria-label="Настройки сервиса">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button class="icon-btn" id="settings-btn" onclick="toggleEditMode()" title="Настроить видимость счетов" aria-label="Настроить">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" data-comment-anchor="c44ccb8c86-path"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
@@ -1299,7 +1688,12 @@
   function overlayClick(e) {
     if (e.target === document.getElementById('stmt-overlay')) closeStatement();
   }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeStatement(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('cfg-overlay').classList.contains('is-open')) closeSettings();
+      else closeStatement();
+    }
+  });
 
   async function loadStatements() {
     const from = document.getElementById('stmt-from').value;
@@ -1560,6 +1954,254 @@
     return { accounts, totals, stmtAccounts, txByAcct };
   }
 
+  // ════════════════════ SETTINGS ═══════════════════
+
+  const BANK_META = {
+    alfabank:    { label: 'Альфа-Банк BY',   loginKey: 'ALFABANK_LOGIN',    pwKey: 'ALFABANK_PASSWORD',    stmtKey: 'ALFABANK_STATEMENT_ACCOUNTS',    extra: [] },
+    priorbank:   { label: 'Приорбанк BY',    loginKey: 'PRIORBANK_LOGIN',   pwKey: 'PRIORBANK_PASSWORD',   stmtKey: 'PRIORBANK_STATEMENT_ACCOUNTS',   extra: [] },
+    belveb:      { label: 'БелВЭБ BY',       loginKey: 'BELVEB_LOGIN',      pwKey: 'BELVEB_PASSWORD',      stmtKey: 'BELVEB_STATEMENT_ACCOUNTS',      extra: [] },
+    paritetbank: { label: 'Паритетбанк BY',  loginKey: 'PARITETBANK_LOGIN', pwKey: 'PARITETBANK_PASSWORD', stmtKey: 'PARITETBANK_STATEMENT_ACCOUNTS', extra: [{ key: 'PARITETBANK_ORG', label: 'Организация (если несколько)', type: 'text', ph: '' }] },
+  };
+  const SENSITIVE_KEYS = new Set(['ALFABANK_PASSWORD','PRIORBANK_PASSWORD','BELVEB_PASSWORD','PARITETBANK_PASSWORD','API_KEY','ONEC_PASSWORD','ONEC_API_KEY']);
+
+  let cfgOrig = {};      // original values from GET /api/settings
+  let cfgAccounts = [];  // from GET /api/settings/accounts
+
+  function openSettings() {
+    document.getElementById('cfg-overlay').classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    loadSettingsData();
+  }
+  function closeSettings() {
+    document.getElementById('cfg-overlay').classList.remove('is-open');
+    document.body.style.overflow = '';
+    document.getElementById('cfg-save-status').textContent = '';
+    document.getElementById('cfg-save-status').className = '';
+  }
+  function cfgOverlayClick(e) {
+    if (e.target === document.getElementById('cfg-overlay')) closeSettings();
+  }
+
+  // ── Nav tabs ──────────────────────────────────────
+  document.getElementById('cfg-nav').addEventListener('click', e => {
+    const btn = e.target.closest('.cfg-nav-item');
+    if (!btn) return;
+    document.querySelectorAll('.cfg-nav-item').forEach(b => b.classList.remove('is-active'));
+    document.querySelectorAll('.cfg-section').forEach(s => s.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    document.getElementById('cfg-sec-' + btn.dataset.section).classList.add('is-active');
+  });
+
+  // ── Load settings ─────────────────────────────────
+  async function loadSettingsData() {
+    try {
+      const [cfgRes, acctRes] = await Promise.all([
+        apiFetch('/api/settings'),
+        apiFetch('/api/settings/accounts'),
+      ]);
+      if (!cfgRes.ok || !acctRes.ok) throw new Error('HTTP ' + cfgRes.status);
+      const cfgJson  = await cfgRes.json();
+      const acctJson = await acctRes.json();
+      cfgOrig = cfgJson;
+      cfgAccounts = acctJson.accounts || [];
+      populateSettings();
+      populateStmtAccounts();
+    } catch (err) {
+      console.error('Settings load error', err);
+    }
+  }
+
+  function populateSettings() {
+    // Populate plain inputs / selects / toggles by data-cfg-key
+    document.querySelectorAll('[data-cfg-key]').forEach(el => {
+      const key = el.dataset.cfgKey;
+      const rawVal = cfgOrig[key] ?? '';
+      if (el.type === 'checkbox') {
+        // boolean toggle: "true" → checked, anything else → unchecked
+        el.checked = rawVal === 'true';
+      } else if (el.tagName === 'SELECT') {
+        el.value = rawVal || el.options[0]?.value || '';
+      } else if (SENSITIVE_KEYS.has(key)) {
+        // Sensitive: show placeholder if set, empty if not set
+        el.value = '';
+        el.placeholder = rawVal === '***' ? '●●●●●●●●' : 'Не задан';
+      } else {
+        el.value = rawVal;
+      }
+    });
+    // Port (readonly display)
+    const portEl = document.getElementById('cfg-port-val');
+    if (portEl) portEl.textContent = cfgOrig['API_PORT'] || '3000';
+
+    // Build banks section
+    buildBanksSection();
+  }
+
+  function buildBanksSection() {
+    const container = document.getElementById('cfg-banks-list');
+    container.innerHTML = '';
+    for (const [bankId, meta] of Object.entries(BANK_META)) {
+      const loginVal = cfgOrig[meta.loginKey] || '';
+      const pwIsSet  = cfgOrig[meta.pwKey] === '***';
+      const block = document.createElement('div');
+      block.className = 'cfg-bank-block';
+      block.innerHTML = `
+        <div class="cfg-bank-header">
+          <span class="bank-name">${meta.label}</span>
+        </div>
+        <div class="cfg-bank-body">
+          <div class="cfg-field">
+            <label>Логин</label>
+            <input type="text" data-cfg-key="${meta.loginKey}" value="${escHtml(loginVal)}" placeholder="Не задан" autocomplete="off">
+          </div>
+          <div class="cfg-field">
+            <label>Пароль</label>
+            <div class="cfg-pw-wrap">
+              <input type="password" data-cfg-key="${meta.pwKey}"
+                     value="" placeholder="${pwIsSet ? '●●●●●●●●' : 'Не задан'}"
+                     autocomplete="new-password">
+              <button type="button" class="pw-toggle" onclick="togglePw(this)" title="Показать/скрыть">
+                <svg class="eye-show" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>
+                <svg class="eye-hide" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M3 3l14 14M10 4C5.6 4 2 10 2 10s1 1.6 2.7 3M17.3 7A14.4 14.4 0 0118 10s-3.6 6-8 6a6.5 6.5 0 01-3.3-.9"/><circle cx="10" cy="10" r="2.5"/></svg>
+              </button>
+            </div>
+          </div>
+          ${meta.extra.map(ex => `
+          <div class="cfg-field">
+            <label>${ex.label}</label>
+            <input type="${ex.type}" data-cfg-key="${ex.key}"
+                   value="${escHtml(cfgOrig[ex.key] || '')}" placeholder="${ex.ph}">
+          </div>`).join('')}
+        </div>`;
+      container.appendChild(block);
+    }
+  }
+
+  function populateStmtAccounts() {
+    const container = document.getElementById('cfg-stmt-accounts');
+    container.innerHTML = '';
+    const byBank = {};
+    for (const acc of cfgAccounts) {
+      (byBank[acc.bank] = byBank[acc.bank] || []).push(acc);
+    }
+    const bankOrder = ['alfabank','priorbank','belveb','paritetbank'];
+    let any = false;
+    for (const bankId of bankOrder) {
+      const list = byBank[bankId];
+      if (!list || list.length === 0) continue;
+      any = true;
+      const group = document.createElement('div');
+      group.className = 'cfg-stmt-bank';
+      group.dataset.bankId = bankId;
+      const bankLabel = BANK_META[bankId]?.label || bankId;
+      group.innerHTML = `<div class="cfg-stmt-bank-title">${escHtml(bankLabel)}</div>
+        <div class="cfg-stmt-list" data-stmt-bank="${escHtml(bankId)}"></div>`;
+      const ul = group.querySelector('.cfg-stmt-list');
+      for (const acc of list) {
+        const item = document.createElement('label');
+        item.className = 'cfg-stmt-item';
+        item.innerHTML = `
+          <input type="checkbox" data-stmt-acc="${escHtml(acc.accountNumber)}" ${acc.statementEnabled ? 'checked' : ''}>
+          <span class="stmt-acc-num">${fmtAcct(acc.accountNumber)}</span>
+          <span class="stmt-acc-cur">${escHtml(acc.currency)}</span>
+          ${acc.name ? `<span class="stmt-acc-name">${escHtml(acc.name)}</span>` : ''}`;
+        ul.appendChild(item);
+      }
+      container.appendChild(group);
+    }
+    if (!any) container.innerHTML = '<div class="cfg-empty">Счета пока не загружены. Нажмите «Синхронизировать» на дашборде.</div>';
+  }
+
+  // ── Collect & save ────────────────────────────────
+  async function saveSettings() {
+    const btn = document.getElementById('cfg-save-btn');
+    const statusEl = document.getElementById('cfg-save-status');
+    btn.disabled = true;
+    btn.textContent = 'Сохранение…';
+    statusEl.textContent = '';
+    statusEl.className = '';
+
+    const payload = {};
+
+    // Collect all [data-cfg-key] inputs
+    document.querySelectorAll('[data-cfg-key]').forEach(el => {
+      const key = el.dataset.cfgKey;
+      if (el.type === 'checkbox') {
+        payload[key] = el.checked ? 'true' : 'false';
+      } else {
+        const val = el.value.trim();
+        if (SENSITIVE_KEYS.has(key)) {
+          if (val === '') {
+            // Empty: keep original (*** = no change, '' = clear)
+            payload[key] = (cfgOrig[key] === '***') ? '***' : '';
+          } else {
+            payload[key] = val;
+          }
+        } else {
+          payload[key] = val;
+        }
+      }
+    });
+
+    // Collect statement accounts by bank
+    document.querySelectorAll('[data-stmt-bank]').forEach(ul => {
+      const bankId = ul.dataset.stmtBank;
+      const stmtKey = BANK_META[bankId]?.stmtKey;
+      if (!stmtKey) return;
+      const checked = [...ul.querySelectorAll('input[type=checkbox]:checked')]
+        .map(cb => cb.dataset.stmtAcc).filter(Boolean).join(',');
+      payload[stmtKey] = checked;
+    });
+
+    const apiKeyChanged = !SENSITIVE_KEYS.has('API_KEY')
+      ? false
+      : (payload['API_KEY'] !== undefined && payload['API_KEY'] !== '***' && payload['API_KEY'] !== '');
+
+    try {
+      const res = await apiFetch('/api/settings', 'POST', undefined, payload);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'HTTP ' + res.status);
+      }
+      statusEl.textContent = 'Настройки сохранены';
+      statusEl.className = 'ok';
+      setTimeout(() => { statusEl.textContent = ''; statusEl.className = ''; }, 4000);
+
+      if (apiKeyChanged) {
+        setTimeout(() => {
+          alert('API-ключ изменён. Необходима повторная авторизация.');
+          doLogout();
+        }, 500);
+      }
+    } catch (err) {
+      statusEl.textContent = 'Ошибка: ' + err.message;
+      statusEl.className = 'err';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить';
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────
+  function togglePw(btn) {
+    const input = btn.closest('.cfg-pw-wrap').querySelector('input');
+    const showIcon = btn.querySelector('.eye-show');
+    const hideIcon = btn.querySelector('.eye-hide');
+    if (input.type === 'password') {
+      input.type = 'text';
+      showIcon.style.display = 'none';
+      hideIcon.style.display = '';
+    } else {
+      input.type = 'password';
+      showIcon.style.display = '';
+      hideIcon.style.display = 'none';
+    }
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function mockJson(obj, status = 200) {
     return Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(obj) });
   }
@@ -1570,6 +2212,8 @@
     if (base === '/api/accounts')           return mockJson({ accounts: DEMO.accounts, count: DEMO.accounts.length });
     if (base === '/api/today-totals')        return mockJson({ totals: DEMO.totals, date: todayStr() });
     if (base === '/api/statement-accounts')  return mockJson({ accounts: DEMO.stmtAccounts });
+    if (base === '/api/settings')            return mockJson({ SCHEDULE_START_HOUR:'9', SCHEDULE_END_HOUR:'17', SCHEDULE_INTERVAL_MINUTES:'5', APP_TIMEZONE:'Europe/Minsk', EXTRA_WORKING_DAYS:'', API_KEY:'***', API_PORT:'3000', DB_PATH:'./data/accounts.db', HEADLESS:'true', BROWSER_TIMEOUT_MS:'30000', CHROMIUM_EXECUTABLE_PATH:'', ALFABANK_LOGIN:'', ALFABANK_PASSWORD:'', PRIORBANK_LOGIN:'', PRIORBANK_PASSWORD:'', BELVEB_LOGIN:'', BELVEB_PASSWORD:'', PARITETBANK_LOGIN:'', PARITETBANK_PASSWORD:'', PARITETBANK_ORG:'', ALFABANK_STATEMENT_ACCOUNTS:'', PRIORBANK_STATEMENT_ACCOUNTS:'', BELVEB_STATEMENT_ACCOUNTS:'', PARITETBANK_STATEMENT_ACCOUNTS:'', ONEC_WEBHOOK_URL:'', ONEC_USERNAME:'', ONEC_PASSWORD:'', ONEC_API_KEY:'', DEBUG_SCREENSHOTS:'false', LOG_LEVEL:'info' });
+    if (base === '/api/settings/accounts')   return mockJson({ accounts: DEMO.accounts.map(a => ({ bank: a.bank, accountNumber: a.accountNumber, currency: a.currency, name: a.name, statementEnabled: DEMO.stmtAccounts.some(s => s.bank === a.bank && s.accountNumber === a.accountNumber) })) });
     if (base === '/api/statements') {
       const key = `${params.get('bank')}:${params.get('account')}`;
       let txs = (DEMO.txByAcct[key] || []).slice();

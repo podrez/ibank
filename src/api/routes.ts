@@ -1,16 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db, schema } from '../db';
 import { desc, eq, and, gte, lte, sql, count } from 'drizzle-orm';
-import { runSync } from '../scheduler';
-import { getEnabledBanks } from '../banks';
+import { runSync, stopScheduler, startScheduler } from '../scheduler';
+import { getEnabledBanks, resetEnabledBanks } from '../banks';
 import { syncBankStatement, syncAllStatements } from '../scraper';
 import { logger } from '../logger';
 import { isoToday } from '../utils/dates';
+import { getConfig, setConfig, deleteConfig, getAllConfigPublic, isSensitive, ALL_SETTING_KEYS } from '../config/store';
+import { closeBrowserIfOpen } from '../scraper/browser';
 
 export const router = Router();
 
 const apiKeyAuth = (req: Request, res: Response, next: NextFunction): void => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getConfig('API_KEY');
   if (!apiKey) { next(); return; }
 
   const provided =
@@ -185,7 +187,7 @@ router.post('/statements/refresh', async (req, res) => {
  */
 router.get('/today-totals', async (_req, res) => {
   try {
-    const todayMinsk = new Intl.DateTimeFormat('sv', { timeZone: process.env.APP_TIMEZONE ?? 'Europe/Minsk' }).format(new Date());
+    const todayMinsk = new Intl.DateTimeFormat('sv', { timeZone: getConfig('APP_TIMEZONE') ?? 'Europe/Minsk' }).format(new Date());
 
     const rows = await db
       .select({
@@ -216,20 +218,13 @@ router.get('/today-totals', async (_req, res) => {
  */
 router.get('/statement-accounts', (_req, res) => {
   const accounts: { bank: string; accountNumber: string }[] = [];
-
-  for (const acc of (process.env.ALFABANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
-    accounts.push({ bank: 'alfabank', accountNumber: acc });
+  const banks = ['alfabank', 'priorbank', 'belveb', 'paritetbank'];
+  for (const bank of banks) {
+    const key = `${bank.toUpperCase()}_STATEMENT_ACCOUNTS`;
+    for (const acc of (getConfig(key) ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+      accounts.push({ bank, accountNumber: acc });
+    }
   }
-  for (const acc of (process.env.PRIORBANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
-    accounts.push({ bank: 'priorbank', accountNumber: acc });
-  }
-  for (const acc of (process.env.BELVEB_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
-    accounts.push({ bank: 'belveb', accountNumber: acc });
-  }
-  for (const acc of (process.env.PARITETBANK_STATEMENT_ACCOUNTS ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
-    accounts.push({ bank: 'paritetbank', accountNumber: acc });
-  }
-
   res.json({ accounts });
 });
 
@@ -237,3 +232,121 @@ function firstDayOfMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
+
+// ── Settings endpoints ─────────────────────────────────────────────────────────
+
+/**
+ * GET /api/settings
+ * Returns all configurable settings. Sensitive values are masked as "***".
+ * Also includes read-only runtime keys (API_PORT, DB_PATH).
+ */
+router.get('/settings', (_req, res) => {
+  const cfg = getAllConfigPublic();
+  cfg['API_PORT'] = process.env.API_PORT ?? '3000';
+  cfg['DB_PATH']  = process.env.DB_PATH  ?? './data/accounts.db';
+  res.json(cfg);
+});
+
+/**
+ * POST /api/settings
+ * Accepts a partial settings object. Rules:
+ *  - "***"  → skip (unchanged sensitive value)
+ *  - ""     → delete from DB (falls back to env)
+ *  - other  → save to DB
+ * Triggers live reloads as needed.
+ */
+router.post('/settings', async (req, res) => {
+  try {
+    const body = req.body as Record<string, string>;
+
+    const BANK_IDS = ['alfabank', 'priorbank', 'belveb', 'paritetbank'] as const;
+    const SCHEDULER_KEYS = new Set(['SCHEDULE_START_HOUR', 'SCHEDULE_END_HOUR', 'SCHEDULE_INTERVAL_MINUTES', 'APP_TIMEZONE', 'EXTRA_WORKING_DAYS']);
+    const BROWSER_KEYS   = new Set(['HEADLESS', 'BROWSER_TIMEOUT_MS', 'CHROMIUM_EXECUTABLE_PATH']);
+
+    let restartScheduler = false;
+    let restartBrowser   = false;
+    const banksNeedingReset = new Set<string>();
+
+    for (const [key, rawValue] of Object.entries(body)) {
+      // Ignore unknown keys and read-only keys
+      if (!ALL_SETTING_KEYS.includes(key as typeof ALL_SETTING_KEYS[number])) continue;
+
+      const value = String(rawValue);
+
+      // "***" sentinel for sensitive fields means "keep as-is"
+      if (isSensitive(key) && value === '***') continue;
+
+      const prev = getConfig(key);
+
+      if (value === '') {
+        deleteConfig(key);
+      } else {
+        setConfig(key, value);
+      }
+
+      const changed = value !== prev;
+      if (!changed) continue;
+
+      if (SCHEDULER_KEYS.has(key)) restartScheduler = true;
+      if (BROWSER_KEYS.has(key))   restartBrowser   = true;
+
+      // Detect credential changes per bank
+      for (const bankId of BANK_IDS) {
+        const upper = bankId.toUpperCase();
+        if (key === `${upper}_LOGIN` || key === `${upper}_PASSWORD`) {
+          banksNeedingReset.add(bankId);
+        }
+      }
+    }
+
+    // Apply live reloads
+    if (restartBrowser) {
+      await closeBrowserIfOpen();
+    }
+
+    if (banksNeedingReset.size > 0) {
+      resetEnabledBanks();
+      const banks = getEnabledBanks();
+      for (const bankId of banksNeedingReset) {
+        const adapter = banks.find((b) => b.id === bankId);
+        if (adapter) await adapter.resetSession();
+      }
+    }
+
+    if (restartScheduler) {
+      stopScheduler();
+      startScheduler();
+    }
+
+    const newLogLevel = getConfig('LOG_LEVEL');
+    if (newLogLevel) logger.level = newLogLevel;
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error('POST /settings error', { error: (err as Error).message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/settings/accounts
+ * All known accounts with statementEnabled flag.
+ */
+router.get('/settings/accounts', async (_req, res) => {
+  try {
+    const rows = await db.query.accounts.findMany({
+      columns: { bank: true, accountNumber: true, currency: true, name: true },
+    });
+
+    const result = rows.map((row) => {
+      const key = `${row.bank.toUpperCase()}_STATEMENT_ACCOUNTS`;
+      const list = (getConfig(key) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      return { ...row, statementEnabled: list.includes(row.accountNumber) };
+    });
+
+    res.json({ accounts: result });
+  } catch (err) {
+    logger.error('GET /settings/accounts error', { error: (err as Error).message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});

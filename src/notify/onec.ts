@@ -1,4 +1,5 @@
 import { logger } from '../logger';
+import { getConfig } from '../config/store';
 
 const MAX_ATTEMPTS = 3;
 
@@ -34,12 +35,12 @@ async function fetchWithRetry(
  * Silently skips if ONEC_WEBHOOK_URL is not set.
  */
 export async function notifyStatementChanged(bank: string, accountNumber: string): Promise<void> {
-  const url = process.env.ONEC_WEBHOOK_URL;
+  const url = getConfig('ONEC_WEBHOOK_URL');
   if (!url) return;
 
-  const username = process.env.ONEC_USERNAME ?? '';
-  const password = process.env.ONEC_PASSWORD ?? '';
-  const apiKey   = process.env.ONEC_API_KEY ?? '';
+  const username = getConfig('ONEC_USERNAME') ?? '';
+  const password = getConfig('ONEC_PASSWORD') ?? '';
+  const apiKey   = getConfig('ONEC_API_KEY') ?? '';
 
   const basicToken = Buffer.from(`${username}:${password}`).toString('base64');
 

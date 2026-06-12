@@ -1,7 +1,8 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { ScrapedAccount } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
+import { getConfig } from '../../config/store';
 
 /**
  * Scrape account balances from the BelVEB DBO Cabinet.
@@ -48,7 +49,7 @@ export async function scrapeAccounts(page: Page): Promise<ScrapedAccount[]> {
     { timeout: 20_000 },
   ).catch(() => null);
 
-  if (process.env.DEBUG_SCREENSHOTS === 'true') {
+  if (getConfig('DEBUG_SCREENSHOTS') === 'true') {
     const dir = './data/debug';
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(`${dir}/belveb-dashboard.html`, await page.content());

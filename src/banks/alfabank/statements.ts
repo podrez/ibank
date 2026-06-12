@@ -1,10 +1,11 @@
-import { Page } from 'playwright';
+﻿import { Page } from 'playwright';
 import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
 import path from 'path';
 import { makeSnapper } from '../../utils/debug';
 import { strPick, numPick } from '../../utils/scrape';
+import { getConfig } from '../../config/store';
 
 const BASE_URL = 'https://online.alfabank.by';
 const DASHBOARD_URL = `${BASE_URL}/Cabinet/Dashboard/`;
@@ -513,7 +514,7 @@ async function domScrape(page: Page, req: StatementRequest): Promise<ScrapedTran
   await page.waitForLoadState('networkidle').catch(() => null);
   await page.waitForTimeout(1_000);
 
-  if (process.env.DEBUG_SCREENSHOTS === 'true') {
+  if (getConfig('DEBUG_SCREENSHOTS') === 'true') {
     if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
     const safe = req.accountNumber.replace(/[^A-Z0-9]/gi, '_');
     fs.writeFileSync(path.join(DEBUG_DIR, `alfabank-statement-${safe}.html`), await page.content());

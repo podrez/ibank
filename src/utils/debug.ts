@@ -1,6 +1,7 @@
 import { Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { getConfig } from '../config/store';
 
 const DEBUG_DIR = './data/debug';
 
@@ -13,7 +14,7 @@ function ensureDir(): void {
  * No-op unless DEBUG_SCREENSHOTS=true.
  */
 export async function saveDebugSnapshot(page: Page, name: string): Promise<void> {
-  if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
+  if (getConfig('DEBUG_SCREENSHOTS') !== 'true') return;
   try {
     ensureDir();
     await page.screenshot({ path: path.join(DEBUG_DIR, `${name}.png`), fullPage: true }).catch(() => null);
@@ -31,7 +32,7 @@ export async function saveDebugSnapshot(page: Page, name: string): Promise<void>
  */
 export function makeSnapper(page: Page, prefix: string, accountNumber: string) {
   return async (label: string): Promise<void> => {
-    if (process.env.DEBUG_SCREENSHOTS !== 'true') return;
+    if (getConfig('DEBUG_SCREENSHOTS') !== 'true') return;
     try {
       ensureDir();
       const safe = accountNumber.replace(/[^A-Z0-9]/gi, '_');

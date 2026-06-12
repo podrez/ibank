@@ -3,6 +3,7 @@ import { AlfabankAdapter } from './alfabank';
 import { PriorbankAdapter } from './priorbank';
 import { BelvebAdapter } from './belveb';
 import { ParitetbankAdapter } from './paritetbank';
+import { getConfig } from '../config/store';
 
 // Singleton instances — adapters hold the active Playwright page, so recreating
 // them on every sync cycle leaks browser tabs (each login() opens ctx.newPage()
@@ -19,28 +20,33 @@ export function getEnabledBanks(): BankAdapter[] {
 
   const banks: BankAdapter[] = [];
 
-  const alfabankLogin = process.env.ALFABANK_LOGIN ?? process.env.BANK_LOGIN;
+  const alfabankLogin = getConfig('ALFABANK_LOGIN') ?? getConfig('BANK_LOGIN');
   if (alfabankLogin) {
     banks.push(new AlfabankAdapter());
   }
 
-  const priorbankLogin = process.env.PRIORBANK_LOGIN;
+  const priorbankLogin = getConfig('PRIORBANK_LOGIN');
   if (priorbankLogin) {
     banks.push(new PriorbankAdapter());
   }
 
-  const belvebLogin = process.env.BELVEB_LOGIN;
+  const belvebLogin = getConfig('BELVEB_LOGIN');
   if (belvebLogin) {
     banks.push(new BelvebAdapter());
   }
 
-  const paritetbankLogin = process.env.PARITETBANK_LOGIN;
+  const paritetbankLogin = getConfig('PARITETBANK_LOGIN');
   if (paritetbankLogin) {
     banks.push(new ParitetbankAdapter());
   }
 
   _banks = banks;
   return banks;
+}
+
+/** Force re-evaluation of enabled banks on next call to getEnabledBanks(). */
+export function resetEnabledBanks(): void {
+  _banks = null;
 }
 
 export type { BankAdapter, ScrapedAccount, ScrapedTransaction, StatementRequest } from './types';

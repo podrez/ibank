@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { runMigrations } from './db';
+import { initConfigStore } from './config/store';
 import { startApiServer } from './api';
 import { startScheduler, stopScheduler } from './scheduler';
 import { closeBrowser } from './scraper/browser';
@@ -9,6 +10,7 @@ async function main() {
   logger.info('Account Balance Service starting');
 
   runMigrations();
+  initConfigStore();
   logger.info('Database ready');
 
   startApiServer();

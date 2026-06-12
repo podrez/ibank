@@ -2,6 +2,7 @@ import { Page } from 'playwright';
 import { getBrowserContext, resetContext } from '../../scraper/browser';
 import { logger } from '../../logger';
 import { saveDebugSnapshot } from '../../utils/debug';
+import { getConfig } from '../../config/store';
 
 const BANK_ID = 'paritetbank';
 const BASE_URL = 'https://eparitet.by';
@@ -19,11 +20,11 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 }
 
 export async function login(): Promise<Page> {
-  const bankLogin = process.env.PARITETBANK_LOGIN;
-  const bankPassword = process.env.PARITETBANK_PASSWORD;
+  const bankLogin = getConfig('PARITETBANK_LOGIN');
+  const bankPassword = getConfig('PARITETBANK_PASSWORD');
 
   if (!bankLogin || !bankPassword) {
-    throw new Error('PARITETBANK_LOGIN and PARITETBANK_PASSWORD must be set in environment variables');
+    throw new Error('PARITETBANK_LOGIN and PARITETBANK_PASSWORD must be set');
   }
 
   const ctx = await getBrowserContext(BANK_ID);
@@ -93,7 +94,7 @@ export async function login(): Promise<Page> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function handleOrgSelection(page: Page): Promise<void> {
-  const preferredOrg = process.env.PARITETBANK_ORG?.trim();
+  const preferredOrg = getConfig('PARITETBANK_ORG')?.trim();
 
   // Try to click the preferred org by name, or fall back to the first item
   const clicked = await page.evaluate((orgName: string | undefined) => {

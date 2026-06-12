@@ -5,6 +5,7 @@ import { logger } from '../logger';
 import crypto from 'crypto';
 import { notifyStatementChanged } from '../notify/onec';
 import { isoToday } from '../utils/dates';
+import { getConfig } from '../config/store';
 
 export interface SyncResult {
   bank: string;
@@ -242,7 +243,7 @@ function computeTxKey(tx: ScrapedTransaction): string {
  */
 function getStatementAccounts(bankId: string): string[] {
   const key = `${bankId.toUpperCase()}_STATEMENT_ACCOUNTS`;
-  const raw = process.env[key] ?? '';
+  const raw = getConfig(key) ?? '';
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
