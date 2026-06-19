@@ -1303,6 +1303,7 @@
 
 <script>
   const POLL_SEC = 30;
+  const BASE = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
   // ── bank metadata ────────────────────────────────
   const BANKS = {
@@ -1376,7 +1377,7 @@
 
   async function probeBackend() {
     try {
-      const r = await fetch('/health', { method: 'GET' });
+      const r = await fetch(BASE + '/health', { method: 'GET' });
       return r.ok;
     } catch { return false; }
   }
@@ -1889,7 +1890,7 @@
     if (demoMode) return mockFetch(path, method, body);
     const opts = { method, headers: { 'X-Api-Key': key ?? apiKey } };
     if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-    return fetch(path, opts);
+    return fetch(BASE + path, opts);
   }
 
   function fmtBalance(val) {

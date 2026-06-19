@@ -5,6 +5,7 @@ import { logger } from '../logger';
 
 export function createApp() {
   const app = express();
+  const base = (process.env.BASE_PATH ?? '').replace(/\/$/, ''); // e.g. '/ibank' or ''
 
   app.use(express.json());
 
@@ -14,14 +15,14 @@ export function createApp() {
     next();
   });
 
-  app.use('/api', router);
+  app.use(`${base}/api`, router);
 
   // Health check (no auth required)
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.get(`${base}/health`, (_req, res) => res.json({ status: 'ok' }));
 
   // Web UI — served from public/ relative to the project root
   const publicDir = path.join(__dirname, '../../public');
-  app.use(express.static(publicDir));
+  app.use(base || '/', express.static(publicDir));
 
   return app;
 }
