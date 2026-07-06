@@ -55,7 +55,7 @@ A built-in dashboard is served at `http://localhost:3000/`.
 - **Visibility toggle** — the gear button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
 - **Statement viewer** — accounts enabled for statement sync show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
 - **Settings panel** — the sliders button in the header opens a settings modal with sections:
-  - **Банки** — credentials (login/password) for each bank; a bank becomes enabled as soon as its login is saved.
+  - **Банки** — credentials (login/password) for each bank; a bank becomes enabled as soon as its login is saved. Alfa-Bank additionally shows a **«Вход по SMS»** panel for the operator-driven SMS login (see [Interactive SMS login](#interactive-sms-login-alfa-bank)).
   - **Выписки** — checkboxes over all scraped accounts; toggling an account adds or removes it from automatic statement sync.
   - **Расписание** — start/end hours, interval, timezone, extra working days.
   - **REST API** — API key rotation (requires re-login after change); API port is shown read-only.
@@ -67,11 +67,32 @@ Settings saved via the UI are persisted to the `settings` table in SQLite and ta
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
+## Interactive SMS login (Alfa-Bank)
+
+Alfa-Bank BY requires an SMS one-time code at login. To avoid requesting an SMS on
+every scrape cycle (which gets rate-limited and risks blocking the account), the
+**scheduled scraper never submits credentials** — it only reuses a saved session:
+
+- Automated `login()` is **session-only**: it reuses the session persisted to
+  `<SESSION_DIR>/alfabank.json` (cookies + localStorage). If the session is gone it
+  raises a non-retryable "re-authentication required" error instead of triggering an SMS.
+- An operator restores access from the web UI: **Settings → Банки → Alfa-Bank →
+  «Вход по SMS» → «Войти (запросить SMS)»**. Alfa sends the code, a field appears,
+  the operator enters it and confirms. On success the session is persisted and the
+  scheduler resumes on the saved session — no further SMS until it expires.
+- The same flow is available over the API: `POST /api/auth/alfabank/start` →
+  `POST /api/auth/alfabank/sms` with `{ "code": "1234" }`.
+- Changing Alfa-Bank credentials clears the saved session, forcing a fresh SMS login.
+
+Session files live under `SESSION_DIR` (default `./data/sessions`). If the SMS flow
+stalls, enable `DEBUG_SCREENSHOTS=true` and inspect `./data/debug/alfabank-sms-*` — the
+timeout error also embeds a `Page shape` dump of the page's fields and buttons.
+
 ## Environment variables
 
 A bank is **enabled** when its `LOGIN` env var (or the corresponding setting saved via the UI) is set.
 
-`DB_PATH` and `API_PORT` can only be set via `.env` / environment (they require a process restart to take effect). All other variables can also be changed at runtime through the Settings panel in the web UI.
+`DB_PATH`, `API_PORT`, `BASE_PATH` and `SESSION_DIR` can only be set via `.env` / environment (they require a process restart to take effect). All other variables can also be changed at runtime through the Settings panel in the web UI.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -85,7 +106,9 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 | `PARITETBANK_PASSWORD` | — | Паритетбанк BY password |
 | `PARITETBANK_ORG` | — | Organisation name to select on login (only needed for multi-org accounts; first org is used if empty) |
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
+| `SESSION_DIR` | `./data/sessions` | Where per-bank browser sessions (cookies) are persisted so an SMS login is not repeated every cycle |
 | `API_PORT` | `3000` | HTTP port for the REST API |
+| `BASE_PATH` | — | Sub-path prefix when served behind a reverse proxy (e.g. `/ibank`); leave empty when the app is at the root |
 | `API_KEY` | — | Secret key to protect the API |
 | `APP_TIMEZONE` | `Europe/Minsk` | IANA timezone used for scheduling, today-totals calculations, and browser locale |
 | `SCHEDULE_START_HOUR` | `9` | Scraping window start hour (APP_TIMEZONE) |
@@ -130,6 +153,11 @@ All endpoints (except `/health`) require authentication via one of:
 | GET | `/api/settings` | All configurable settings (sensitive values masked as `***`) |
 | POST | `/api/settings` | Save settings; `***` = keep existing value, `""` = clear |
 | GET | `/api/settings/accounts` | All scraped accounts with `statementEnabled` flag |
+| GET | `/api/auth` | Banks supporting interactive (SMS) login, with stage and saved-session flag |
+| GET | `/api/auth/<bank>/status` | Interactive-login stage (`idle` / `awaiting_sms`) and whether a session is saved |
+| POST | `/api/auth/<bank>/start` | Begin operator-driven login (fills credentials, triggers SMS) |
+| POST | `/api/auth/<bank>/sms` (body: `{code}`) | Submit the SMS code for a pending login |
+| POST | `/api/auth/<bank>/cancel` | Abort a pending interactive login |
 | GET | `/health` | Health check (no auth required) |
 
 ### Example: GET /api/accounts
@@ -210,7 +238,7 @@ Configuration is read from `config/store.ts` (DB-backed key-value cache, falls b
 
 Each bank adapter uses the strategy best suited to that bank's web application:
 
-- **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback
+- **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback. Alfa-Bank additionally reuses a persisted browser session (see [Interactive SMS login](#interactive-sms-login-alfa-bank)) instead of logging in each cycle.
 - **БелВЭБ** — direct AJAX portlet fetch, with Kendo Grid DOM scraping as fallback
 - **Паритетбанк** — direct REST API calls via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
 

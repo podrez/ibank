@@ -831,6 +831,23 @@
     }
     .cfg-bank-block:not(.is-collapsed) .cfg-bank-status-badge { display: none; }
     .cfg-bank-body { padding: 0.85rem 0.9rem; display: flex; flex-direction: column; gap: 0.65rem; }
+    .cfg-auth {
+      display: flex; flex-direction: column; gap: 0.4rem;
+      padding-top: 0.65rem; border-top: 1px dashed var(--line);
+    }
+    .cfg-auth > label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+    .cfg-auth-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .cfg-auth-code { width: 9rem; font-family: var(--mono); letter-spacing: 0.15em; }
+    .cfg-auth-hint, .cfg-muted { font-size: 0.78rem; color: var(--faint); }
+    .cfg-auth-msg { font-size: 0.8rem; }
+    .cfg-auth-msg.ok { color: var(--pos, #16a34a); }
+    .cfg-auth-msg.err { color: var(--neg, #dc2626); }
+    .cfg-auth-badge {
+      font-size: 0.72rem; font-family: var(--mono);
+      padding: 0.15rem 0.5rem; border-radius: 4px; background: var(--line-soft);
+    }
+    .cfg-auth-badge.ok { color: var(--pos, #16a34a); }
+    .cfg-auth-badge.warn { color: var(--neg, #dc2626); }
     .cfg-field {
       display: flex; flex-direction: column; gap: 0.3rem;
     }
@@ -2033,7 +2050,7 @@
   // ════════════════════ SETTINGS ═══════════════════
 
   const BANK_META = {
-    alfabank:    { label: 'Альфа-Банк BY',   loginKey: 'ALFABANK_LOGIN',    pwKey: 'ALFABANK_PASSWORD',    stmtKey: 'ALFABANK_STATEMENT_ACCOUNTS',    extra: [] },
+    alfabank:    { label: 'Альфа-Банк BY',   loginKey: 'ALFABANK_LOGIN',    pwKey: 'ALFABANK_PASSWORD',    stmtKey: 'ALFABANK_STATEMENT_ACCOUNTS',    extra: [], interactive: true },
     priorbank:   { label: 'Приорбанк BY',    loginKey: 'PRIORBANK_LOGIN',   pwKey: 'PRIORBANK_PASSWORD',   stmtKey: 'PRIORBANK_STATEMENT_ACCOUNTS',   extra: [] },
     belveb:      { label: 'БелВЭБ BY',       loginKey: 'BELVEB_LOGIN',      pwKey: 'BELVEB_PASSWORD',      stmtKey: 'BELVEB_STATEMENT_ACCOUNTS',      extra: [] },
     paritetbank: { label: 'Паритетбанк BY',  loginKey: 'PARITETBANK_LOGIN', pwKey: 'PARITETBANK_PASSWORD', stmtKey: 'PARITETBANK_STATEMENT_ACCOUNTS', extra: [{ key: 'PARITETBANK_ORG', label: 'Организация (если несколько)', type: 'text', ph: '' }] },
@@ -2167,9 +2184,98 @@
             <input type="${ex.type}" data-cfg-key="${ex.key}"
                    value="${escHtml(cfgOrig[ex.key] || '')}" placeholder="${ex.ph}">
           </div>`).join('')}
+          ${meta.interactive ? `
+          <div class="cfg-auth" data-auth-bank="${bankId}">
+            <label>Вход по SMS</label>
+            <div class="cfg-auth-panel"><span class="cfg-muted">Проверка состояния…</span></div>
+          </div>` : ''}
         </div>`;
       container.appendChild(block);
     }
+    // Load interactive-auth state for banks that support it
+    for (const [bankId, meta] of Object.entries(BANK_META)) {
+      if (meta.interactive) renderAuthPanel(bankId);
+    }
+  }
+
+  // ── Interactive SMS login ─────────────────────────
+  async function renderAuthPanel(bankId) {
+    const wrap = document.querySelector(`[data-auth-bank="${bankId}"] .cfg-auth-panel`);
+    if (!wrap) return;
+    try {
+      const res = await apiFetch(`/api/auth/${bankId}/status`, 'GET');
+      const st = await res.json();
+      if (st.stage === 'awaiting_sms') {
+        wrap.innerHTML = `
+          <div class="cfg-auth-hint">Банк отправил SMS-код. Введите его для завершения входа.</div>
+          <div class="cfg-auth-row">
+            <input type="text" inputmode="numeric" autocomplete="one-time-code"
+                   class="cfg-auth-code" placeholder="Код из SMS">
+            <button type="button" class="btn btn-primary" onclick="authSubmit('${bankId}')">Подтвердить</button>
+            <button type="button" class="btn" onclick="authCancel('${bankId}')">Отмена</button>
+          </div>
+          <div class="cfg-auth-msg"></div>`;
+      } else {
+        const badge = st.hasSession
+          ? '<span class="cfg-auth-badge ok">Сессия сохранена</span>'
+          : '<span class="cfg-auth-badge warn">Нет активной сессии</span>';
+        wrap.innerHTML = `
+          <div class="cfg-auth-row">
+            ${badge}
+            <button type="button" class="btn btn-primary" onclick="authStart('${bankId}')">Войти (запросить SMS)</button>
+          </div>
+          <div class="cfg-auth-hint">Сначала сохраните логин и пароль, затем запросите SMS-код.</div>
+          <div class="cfg-auth-msg"></div>`;
+      }
+    } catch (err) {
+      wrap.innerHTML = `<span class="cfg-auth-badge warn">Не удалось получить состояние</span>`;
+    }
+  }
+
+  function authMsg(bankId, text, cls) {
+    const el = document.querySelector(`[data-auth-bank="${bankId}"] .cfg-auth-msg`);
+    if (el) { el.textContent = text || ''; el.className = 'cfg-auth-msg' + (cls ? ' ' + cls : ''); }
+  }
+
+  async function authStart(bankId) {
+    const btn = document.querySelector(`[data-auth-bank="${bankId}"] .btn-primary`);
+    if (btn) { btn.disabled = true; btn.textContent = 'Запрос…'; }
+    authMsg(bankId, '');
+    try {
+      const res = await apiFetch(`/api/auth/${bankId}/start`, 'POST', undefined, {});
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      await renderAuthPanel(bankId);
+      if (body.stage === 'logged_in') authMsg(bankId, body.message || 'Вход выполнен.', 'ok');
+    } catch (err) {
+      await renderAuthPanel(bankId);
+      authMsg(bankId, 'Ошибка: ' + err.message, 'err');
+    }
+  }
+
+  async function authSubmit(bankId) {
+    const codeEl = document.querySelector(`[data-auth-bank="${bankId}"] .cfg-auth-code`);
+    const code = (codeEl?.value || '').trim();
+    if (!code) { authMsg(bankId, 'Введите код из SMS.', 'err'); return; }
+    const btn = document.querySelector(`[data-auth-bank="${bankId}"] .btn-primary`);
+    if (btn) { btn.disabled = true; btn.textContent = 'Проверка…'; }
+    authMsg(bankId, '');
+    try {
+      const res = await apiFetch(`/api/auth/${bankId}/sms`, 'POST', undefined, { code });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      await renderAuthPanel(bankId);
+      authMsg(bankId, 'Вход выполнен, сессия сохранена.', 'ok');
+    } catch (err) {
+      // On a rejected code the flow stays in awaiting_sms — keep the field.
+      await renderAuthPanel(bankId);
+      authMsg(bankId, 'Ошибка: ' + err.message, 'err');
+    }
+  }
+
+  async function authCancel(bankId) {
+    try { await apiFetch(`/api/auth/${bankId}/cancel`, 'POST', undefined, {}); } catch {}
+    await renderAuthPanel(bankId);
   }
 
   function toggleBankBlock(header, bankId) {
@@ -2328,6 +2434,8 @@
     if (base === '/api/accounts')           return mockJson({ accounts: DEMO.accounts, count: DEMO.accounts.length });
     if (base === '/api/today-totals')        return mockJson({ totals: DEMO.totals, date: todayStr() });
     if (base === '/api/statement-accounts')  return mockJson({ accounts: DEMO.stmtAccounts });
+    if (/^\/api\/auth\/[^/]+\/status$/.test(base)) return mockJson({ supported: true, stage: 'idle', hasSession: true });
+    if (/^\/api\/auth\//.test(base))          return mockJson({ stage: 'logged_in', message: 'Демо-режим' });
     if (base === '/api/settings')            return mockJson({ SCHEDULE_START_HOUR:'9', SCHEDULE_END_HOUR:'17', SCHEDULE_INTERVAL_MINUTES:'5', APP_TIMEZONE:'Europe/Minsk', EXTRA_WORKING_DAYS:'', API_KEY:'***', API_PORT:'3000', DB_PATH:'./data/accounts.db', HEADLESS:'true', BROWSER_TIMEOUT_MS:'30000', CHROMIUM_EXECUTABLE_PATH:'', ALFABANK_LOGIN:'', ALFABANK_PASSWORD:'', PRIORBANK_LOGIN:'', PRIORBANK_PASSWORD:'', BELVEB_LOGIN:'', BELVEB_PASSWORD:'', PARITETBANK_LOGIN:'', PARITETBANK_PASSWORD:'', PARITETBANK_ORG:'', ALFABANK_STATEMENT_ACCOUNTS:'', PRIORBANK_STATEMENT_ACCOUNTS:'', BELVEB_STATEMENT_ACCOUNTS:'', PARITETBANK_STATEMENT_ACCOUNTS:'', ONEC_WEBHOOK_URL:'', ONEC_USERNAME:'', ONEC_PASSWORD:'', ONEC_API_KEY:'', DEBUG_SCREENSHOTS:'false', LOG_LEVEL:'info' });
     if (base === '/api/settings/accounts')   return mockJson({ accounts: DEMO.accounts.map(a => ({ bank: a.bank, accountNumber: a.accountNumber, currency: a.currency, name: a.name, statementEnabled: DEMO.stmtAccounts.some(s => s.bank === a.bank && s.accountNumber === a.accountNumber) })) });
     if (base === '/api/statements') {

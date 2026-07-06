@@ -1,10 +1,46 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
+import fs from 'fs';
+import path from 'path';
 import { logger } from '../logger';
 import { getConfig } from '../config/store';
 
 let browser: Browser | null = null;
 const contexts = new Map<string, BrowserContext>();
 let launchPromise: Promise<Browser> | null = null;
+
+// Persisted session (cookies + localStorage) per bank, so a login that required
+// SMS confirmation survives process restarts and does not need to be repeated.
+const SESSION_DIR = process.env.SESSION_DIR ?? './data/sessions';
+
+function sessionPath(bankId: string): string {
+  return path.join(SESSION_DIR, `${bankId}.json`);
+}
+
+export function hasSavedSession(bankId: string): boolean {
+  return fs.existsSync(sessionPath(bankId));
+}
+
+/** Persist the current cookies/localStorage of a bank's context to disk. */
+export async function saveSession(bankId: string): Promise<void> {
+  const ctx = contexts.get(bankId);
+  if (!ctx) return;
+  try {
+    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    await ctx.storageState({ path: sessionPath(bankId) });
+    logger.info(`Session persisted for bank: ${bankId}`);
+  } catch (err) {
+    logger.warn(`Failed to persist session for ${bankId}: ${(err as Error).message}`);
+  }
+}
+
+/** Forget a bank's saved session and drop its live context. */
+export async function clearSession(bankId: string): Promise<void> {
+  try {
+    if (fs.existsSync(sessionPath(bankId))) fs.rmSync(sessionPath(bankId));
+  } catch { /* ignore */ }
+  await resetContext(bankId);
+  logger.info(`Session cleared for bank: ${bankId}`);
+}
 
 function getTimeout(): number {
   return parseInt(getConfig('BROWSER_TIMEOUT_MS') ?? '') || 30_000;
@@ -53,12 +89,16 @@ export async function getBrowserContext(bankId: string): Promise<BrowserContext>
   const b = await ensureBrowser();
 
   if (!contexts.has(bankId)) {
+    const storagePath = sessionPath(bankId);
+    const storageState = fs.existsSync(storagePath) ? storagePath : undefined;
+    if (storageState) logger.debug(`Restoring saved session for bank: ${bankId}`);
     const ctx = await b.newContext({
       userAgent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'ru-RU',
       timezoneId: getConfig('APP_TIMEZONE') ?? 'Europe/Minsk',
+      storageState,
     });
     ctx.setDefaultTimeout(getTimeout());
     contexts.set(bankId, ctx);

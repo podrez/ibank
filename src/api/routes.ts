@@ -7,7 +7,8 @@ import { syncBankStatement, syncAllStatements } from '../scraper';
 import { logger } from '../logger';
 import { isoToday } from '../utils/dates';
 import { getConfig, setConfig, deleteConfig, getAllConfigPublic, isSensitive, ALL_SETTING_KEYS } from '../config/store';
-import { closeBrowserIfOpen } from '../scraper/browser';
+import { closeBrowserIfOpen, hasSavedSession } from '../scraper/browser';
+import { getInteractiveAuth, interactiveAuthBanks } from '../auth/interactive';
 
 export const router = Router();
 
@@ -232,6 +233,99 @@ function firstDayOfMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
+
+// ── Interactive SMS authentication ──────────────────────────────────────────────
+
+/**
+ * GET /api/auth/:bank/status
+ * Reports whether an interactive (SMS) login is in progress and whether a saved
+ * session exists. Banks without an interactive flow return supported:false.
+ */
+router.get('/auth/:bank/status', (req, res) => {
+  const bank = req.params.bank;
+  const provider = getInteractiveAuth(bank);
+  res.json({
+    bank,
+    supported: !!provider,
+    stage: provider ? provider.status() : 'idle',
+    hasSession: hasSavedSession(bank),
+  });
+});
+
+/**
+ * POST /api/auth/:bank/start
+ * Begin an operator-driven login. Fills credentials and either logs in directly
+ * (session still valid) or triggers an SMS and waits for POST .../sms.
+ */
+router.post('/auth/:bank/start', async (req, res) => {
+  const bank = req.params.bank;
+  const provider = getInteractiveAuth(bank);
+  if (!provider) {
+    res.status(404).json({ error: `Bank "${bank}" has no interactive login` });
+    return;
+  }
+  try {
+    logger.info('Interactive auth start requested', { bank });
+    const result = await provider.start();
+    res.json({ bank, ...result });
+  } catch (err) {
+    logger.error('Interactive auth start failed', { bank, error: (err as Error).message });
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/auth/:bank/sms   body: { code }
+ * Submit the SMS code for a pending interactive login.
+ */
+router.post('/auth/:bank/sms', async (req, res) => {
+  const bank = req.params.bank;
+  const provider = getInteractiveAuth(bank);
+  if (!provider) {
+    res.status(404).json({ error: `Bank "${bank}" has no interactive login` });
+    return;
+  }
+  const code = String((req.body ?? {}).code ?? '').trim();
+  if (!code) {
+    res.status(400).json({ error: 'code is required' });
+    return;
+  }
+  try {
+    logger.info('Interactive auth SMS code submitted', { bank });
+    await provider.submitCode(code);
+    res.json({ bank, stage: 'logged_in', message: 'Вход выполнен, сессия сохранена.' });
+  } catch (err) {
+    logger.error('Interactive auth SMS submit failed', { bank, error: (err as Error).message });
+    res.status(502).json({ error: (err as Error).message, stage: provider.status() });
+  }
+});
+
+/**
+ * POST /api/auth/:bank/cancel
+ * Abort a pending interactive login and release the held browser page.
+ */
+router.post('/auth/:bank/cancel', async (req, res) => {
+  const bank = req.params.bank;
+  const provider = getInteractiveAuth(bank);
+  if (!provider) {
+    res.status(404).json({ error: `Bank "${bank}" has no interactive login` });
+    return;
+  }
+  await provider.cancel().catch(() => null);
+  res.json({ bank, stage: 'idle' });
+});
+
+/**
+ * GET /api/auth
+ * List banks that support interactive login, with their current stage/session.
+ */
+router.get('/auth', (_req, res) => {
+  const banks = interactiveAuthBanks().map((bank) => {
+    const provider = getInteractiveAuth(bank)!;
+    return { bank, stage: provider.status(), hasSession: hasSavedSession(bank) };
+  });
+  res.json({ banks });
+});
 
 // ── Settings endpoints ─────────────────────────────────────────────────────────
 

@@ -76,7 +76,33 @@ Scheduler (node-cron)
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
+| GET | `/api/auth` | Banks supporting interactive (SMS) login, with stage + saved-session flag |
+| GET | `/api/auth/<bank>/status` | Interactive-login stage (`idle`/`awaiting_sms`) and whether a session is saved |
+| POST | `/api/auth/<bank>/start` | Begin operator-driven login (fills creds, triggers SMS) |
+| POST | `/api/auth/<bank>/sms` (body: `{code}`) | Submit the SMS code for a pending login |
+| POST | `/api/auth/<bank>/cancel` | Abort a pending interactive login |
 | GET | `/health` | Health check (no auth) |
+
+### Interactive SMS login (Alfa-Bank)
+
+Alfa-Bank BY requires an SMS one-time code at login. The **scheduled scraper never
+submits credentials** — doing so would trigger an SMS every cycle and get
+rate-limited/blocked. Instead:
+
+- Automated `login()` in `src/banks/alfabank/auth.ts` is **session-only**: it reuses
+  the session persisted to `./data/sessions/<bank>.json` (cookies + localStorage). If
+  the session is gone it throws `ReauthRequiredError` (`src/auth/interactive.ts`) —
+  deliberately **not** retryable, so no SMS is fired automatically.
+- An operator restores access from the settings UI (Банки → «Вход по SMS»): the
+  two-step flow (`/api/auth/alfabank/start` → `/api/auth/alfabank/sms`) fills
+  credentials, waits for the bank's SMS, accepts the code, and persists the session.
+- Session persistence lives in `src/scraper/browser.ts` (`saveSession` /
+  `clearSession` / `hasSavedSession`); contexts are created with `storageState` when a
+  saved file exists. Changing a bank's credentials clears its saved session.
+
+The SMS-page selectors (`SMS_INPUT_SELECTORS` / `SMS_CONFIRM_SELECTORS` in
+`alfabank/auth.ts`) are **best-effort** — calibrate against `./data/debug/alfabank-sms-*.html`
+(set `DEBUG_SCREENSHOTS=true`) if the code field / confirm button aren't found.
 
 ### Scraper selector adjustment
 
@@ -112,5 +138,6 @@ Defined in `.env.example`. Key variables:
 - `BELVEB_STATEMENT_ACCOUNTS` — same for БелВЭБ
 - `PARITETBANK_STATEMENT_ACCOUNTS` — same for Паритетбанк
 - `API_KEY` — protects the REST API
+- `SESSION_DIR` — (optional) where per-bank browser sessions are persisted (default `./data/sessions`)
 - `DEBUG_SCREENSHOTS=true` — saves Playwright screenshots/HTML per bank
 - `HEADLESS=false` — run Chromium in headed mode for local debugging
