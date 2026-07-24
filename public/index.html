@@ -1328,6 +1328,7 @@
     priorbank:   { code: 'PRIO', label: 'Приорбанк',   color: '#ffd100', wash: '#fff7d6', ink: '#7a5500', fav: 'https://www.priorbank.by/favicon.ico' },
     belveb:      { code: 'BVEB', label: 'БелВЭБ',       color: '#007a8a', wash: '#e1f4f6', ink: '#005a6e', fav: 'https://dbo2.bveb.by/favicon.ico' },
     paritetbank: { code: 'PRTB', label: 'Паритетбанк', color: '#23358c', wash: '#ecedfb', ink: '#23358c', fav: 'https://eparitet.by/favicons/favicon-32x32.png' },
+    iparitet:    { code: 'IPRT', label: 'Паритетбанк (физлица)', color: '#3752db', wash: '#ebeeff', ink: '#212ac4', fav: 'https://iparitet.by/assets/icons/favicon-32x32.png' },
     unknown:     { code: 'BANK', label: 'Банк',        color: '#6a7180', wash: '#eef0f3', ink: '#374151', fav: '' },
   };
   function bankMeta(b) { return BANKS[b] || BANKS.unknown; }
@@ -1547,7 +1548,7 @@
   }
 
   async function saveStatementAccountsQuiet() {
-    const bankIds = ['alfabank', 'priorbank', 'belveb', 'paritetbank'];
+    const bankIds = ['alfabank', 'priorbank', 'belveb', 'paritetbank', 'iparitet'];
     const payload = {};
     for (const bankId of bankIds) {
       const stmtKey = BANK_META[bankId]?.stmtKey;
@@ -2054,8 +2055,9 @@
     priorbank:   { label: 'Приорбанк BY',    loginKey: 'PRIORBANK_LOGIN',   pwKey: 'PRIORBANK_PASSWORD',   stmtKey: 'PRIORBANK_STATEMENT_ACCOUNTS',   extra: [] },
     belveb:      { label: 'БелВЭБ BY',       loginKey: 'BELVEB_LOGIN',      pwKey: 'BELVEB_PASSWORD',      stmtKey: 'BELVEB_STATEMENT_ACCOUNTS',      extra: [] },
     paritetbank: { label: 'Паритетбанк BY',  loginKey: 'PARITETBANK_LOGIN', pwKey: 'PARITETBANK_PASSWORD', stmtKey: 'PARITETBANK_STATEMENT_ACCOUNTS', extra: [{ key: 'PARITETBANK_ORG', label: 'Организация (если несколько)', type: 'text', ph: '' }] },
+    iparitet:    { label: 'Паритетбанк (физлица)', loginKey: 'IPARITET_LOGIN', pwKey: 'IPARITET_PASSWORD', stmtKey: 'IPARITET_STATEMENT_ACCOUNTS', extra: [], interactive: true },
   };
-  const SENSITIVE_KEYS = new Set(['ALFABANK_PASSWORD','PRIORBANK_PASSWORD','BELVEB_PASSWORD','PARITETBANK_PASSWORD','API_KEY','ONEC_PASSWORD','ONEC_API_KEY']);
+  const SENSITIVE_KEYS = new Set(['ALFABANK_PASSWORD','PRIORBANK_PASSWORD','BELVEB_PASSWORD','PARITETBANK_PASSWORD','IPARITET_PASSWORD','API_KEY','ONEC_PASSWORD','ONEC_API_KEY']);
 
   let cfgOrig = {};      // original values from GET /api/settings
   let cfgAccounts = [];  // from GET /api/settings/accounts
@@ -2301,7 +2303,7 @@
     for (const acc of cfgAccounts) {
       (byBank[acc.bank] = byBank[acc.bank] || []).push(acc);
     }
-    const bankOrder = ['alfabank','priorbank','belveb','paritetbank'];
+    const bankOrder = ['alfabank','priorbank','belveb','paritetbank','iparitet'];
     let any = false;
     for (const bankId of bankOrder) {
       const list = byBank[bankId];

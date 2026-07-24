@@ -3,6 +3,7 @@ import { AlfabankAdapter } from './alfabank';
 import { PriorbankAdapter } from './priorbank';
 import { BelvebAdapter } from './belveb';
 import { ParitetbankAdapter } from './paritetbank';
+import { IparitetAdapter } from './iparitet';
 import { getConfig } from '../config/store';
 
 // Singleton instances — adapters hold the active Playwright page, so recreating
@@ -38,6 +39,11 @@ export function getEnabledBanks(): BankAdapter[] {
   const paritetbankLogin = getConfig('PARITETBANK_LOGIN');
   if (paritetbankLogin) {
     banks.push(new ParitetbankAdapter());
+  }
+
+  const iparitetLogin = getConfig('IPARITET_LOGIN');
+  if (iparitetLogin) {
+    banks.push(new IparitetAdapter());
   }
 
   _banks = banks;

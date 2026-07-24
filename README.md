@@ -2,7 +2,7 @@
 
 Headless browser service that logs into multiple Belarusian banks, scrapes account balances on a schedule, persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
-**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY (`eparitet.by`)
+**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY corporate (`eparitet.by`), Паритетбанк физлица / iParitet (`iparitet.by`)
 
 ## Tech stack
 
@@ -105,6 +105,8 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 | `PARITETBANK_LOGIN` | — | Паритетбанк BY login (leave empty to disable) |
 | `PARITETBANK_PASSWORD` | — | Паритетбанк BY password |
 | `PARITETBANK_ORG` | — | Organisation name to select on login (only needed for multi-org accounts; first org is used if empty) |
+| `IPARITET_LOGIN` | — | iParitet / Паритетбанк физлица login (leave empty to disable); signs in with login/password, SMS only if the bank issues a new-device challenge |
+| `IPARITET_PASSWORD` | — | iParitet password |
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
 | `SESSION_DIR` | `./data/sessions` | Where per-bank browser sessions (cookies) are persisted so an SMS login is not repeated every cycle |
 | `API_PORT` | `3000` | HTTP port for the REST API |
@@ -119,6 +121,7 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 | `PRIORBANK_STATEMENT_ACCOUNTS` | — | Same for Priorbank |
 | `BELVEB_STATEMENT_ACCOUNTS` | — | Same for БелВЭБ |
 | `PARITETBANK_STATEMENT_ACCOUNTS` | — | Same for Паритетбанк |
+| `IPARITET_STATEMENT_ACCOUNTS` | — | Same for iParitet (card/account contract numbers) |
 | `ONEC_WEBHOOK_URL` | — | 1C webhook URL to notify on new transactions (leave empty to disable) |
 | `ONEC_USERNAME` | — | Basic auth username for 1C |
 | `ONEC_PASSWORD` | — | Basic auth password for 1C |
@@ -138,7 +141,7 @@ All endpoints (except `/health`) require authentication via one of:
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/accounts` | All accounts with latest balances |
-| GET | `/api/accounts?bank=<id>` | Accounts for a specific bank (`alfabank`, `priorbank`, `belveb`, `paritetbank`) |
+| GET | `/api/accounts?bank=<id>` | Accounts for a specific bank (`alfabank`, `priorbank`, `belveb`, `paritetbank`, `iparitet`) |
 | POST | `/api/refresh` | Force immediate balance sync (all banks) |
 | POST | `/api/refresh?bank=<id>` | Force sync for a specific bank |
 | GET | `/api/status` | Last sync info, account count, server time |
@@ -240,7 +243,8 @@ Each bank adapter uses the strategy best suited to that bank's web application:
 
 - **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback. Alfa-Bank additionally reuses a persisted browser session (see [Interactive SMS login](#interactive-sms-login-alfa-bank)) instead of logging in each cycle.
 - **БелВЭБ** — direct AJAX portlet fetch, with Kendo Grid DOM scraping as fallback
-- **Паритетбанк** — direct REST API calls via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
+- **Паритетбанк (corporate)** — direct REST API calls via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
+- **iParitet (Паритетбанк физлица)** — Angular SPA with a bearer-token JSON API. Automated login reuses the persisted session and otherwise signs in with login/password (no SMS on a normal sign-in); if the bank issues a new-device SMS challenge, an operator completes it once via the settings UI. Scraping reads the token from `localStorage` and calls the JSON API directly
 
 Statement scraping stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
 
@@ -266,6 +270,7 @@ Set `DEBUG_SCREENSHOTS=true` via `.env` or the Settings panel, trigger a sync, t
 | Priorbank | `priorbank-dashboard.html` / `.png` | `priorbank-statement-<account>.html` / `.png` |
 | БелВЭБ | `belveb-dashboard.html` / `.png` | `belveb-stmt-<account>-<step>.html` / `.png` |
 | Паритетбанк | `paritetbank-accounts-response.json` | `paritetbank-stmt-<account>-response.json` |
+| iParitet | `iparitet-accounts-response.json` | `iparitet-stmt-<account>-response.json` |
 
 Update the relevant `src/banks/<bank>/accounts.ts` or `statements.ts` based on what the debug files reveal.
 

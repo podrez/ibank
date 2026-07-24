@@ -219,7 +219,7 @@ router.get('/today-totals', async (_req, res) => {
  */
 router.get('/statement-accounts', (_req, res) => {
   const accounts: { bank: string; accountNumber: string }[] = [];
-  const banks = ['alfabank', 'priorbank', 'belveb', 'paritetbank'];
+  const banks = ['alfabank', 'priorbank', 'belveb', 'paritetbank', 'iparitet'];
   for (const bank of banks) {
     const key = `${bank.toUpperCase()}_STATEMENT_ACCOUNTS`;
     for (const acc of (getConfig(key) ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -353,7 +353,7 @@ router.post('/settings', async (req, res) => {
   try {
     const body = req.body as Record<string, string>;
 
-    const BANK_IDS = ['alfabank', 'priorbank', 'belveb', 'paritetbank'] as const;
+    const BANK_IDS = ['alfabank', 'priorbank', 'belveb', 'paritetbank', 'iparitet'] as const;
     const SCHEDULER_KEYS = new Set(['SCHEDULE_START_HOUR', 'SCHEDULE_END_HOUR', 'SCHEDULE_INTERVAL_MINUTES', 'APP_TIMEZONE', 'EXTRA_WORKING_DAYS']);
     const BROWSER_KEYS   = new Set(['HEADLESS', 'BROWSER_TIMEOUT_MS', 'CHROMIUM_EXECUTABLE_PATH']);
 

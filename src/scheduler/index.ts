@@ -1,8 +1,9 @@
 import cron, { type ScheduledTask } from 'node-cron';
-import { syncAllBanks, syncBankBalances, syncAllStatements } from '../scraper';
+import { syncBankBalances, syncAllStatements } from '../scraper';
 import { getEnabledBanks, BankAdapter } from '../banks';
 import { logger } from '../logger';
 import { getConfig } from '../config/store';
+import { getInteractiveAuth } from '../auth/interactive';
 
 let syncTask: ScheduledTask | null = null;
 let isSyncing = false;
@@ -33,9 +34,14 @@ function isWorkingDay(): boolean {
 }
 
 /**
- * Runs every INTERVAL minutes, Mon–Sat (extended for transferred working days),
- * from START_HOUR to END_HOUR (APP_TIMEZONE). The actual working-day check
- * happens inside the callback so Saturdays run only when listed in EXTRA_WORKING_DAYS.
+ * A single cron task fires every INTERVAL minutes, every day (APP_TIMEZONE), and
+ * decides per-tick which banks to sync:
+ *   - retail banks (adapter `roundTheClock === true`, e.g. iParitet) — always,
+ *     since they operate 24/7;
+ *   - corporate banks — only within the business window (START_HOUR–END_HOUR,
+ *     Mon–Fri + EXTRA_WORKING_DAYS).
+ * Using one task (rather than two) avoids both firing on the same minute and
+ * contending for the shared browser via the {@link isSyncing} guard.
  */
 export function startScheduler(): void {
   const startHour = getStartHour();
@@ -44,29 +50,22 @@ export function startScheduler(): void {
   const timezone  = getTimezone();
   const extraDays = getExtraWorkingDays();
 
-  // END_HOUR-1: cron range is inclusive — last tick at (END_HOUR-1):xx, not at END_HOUR:00.
-  const cronExpr = `*/${interval} ${startHour}-${endHour - 1} * * 0-6`;
+  const cronExpr = `*/${interval} * * * *`;
   logger.info('Starting scheduler', {
     cronExpr,
     timezone,
-    schedule: `Mon–Fri ${startHour}:00–${endHour}:00 ${timezone}, every ${interval} min (+ extra working days: ${[...extraDays].join(', ') || 'none'})`,
+    schedule: `Retail (24/7) every ${interval} min; corporate Mon–Fri ${startHour}:00–${endHour}:00 ${timezone} (+ extra working days: ${[...extraDays].join(', ') || 'none'})`,
   });
 
-  syncTask = cron.schedule(
-    cronExpr,
-    () => {
-      if (!isWorkingDay()) return;
-      runSync();
-    },
-    { timezone },
-  );
+  syncTask = cron.schedule(cronExpr, () => { runSyncForBanks(banksDueNow()); }, { timezone });
   syncTask.start();
 
-  if (isWorkingDay() && isWorkingHour()) {
-    logger.info('Within working hours — running initial sync');
-    runSync();
+  const initial = banksDueNow();
+  if (initial.length > 0) {
+    logger.info('Running initial sync', { banks: initial.map((b) => b.id) });
+    runSyncForBanks(initial);
   } else {
-    logger.info('Outside working hours — waiting for schedule');
+    logger.info('Outside working hours and no 24/7 banks — waiting for schedule');
   }
 }
 
@@ -76,41 +75,66 @@ export function stopScheduler(): void {
   logger.info('Scheduler stopped');
 }
 
+/**
+ * Banks that should sync on the current tick: retail banks always, corporate
+ * banks only inside the business window.
+ */
+function banksDueNow(): BankAdapter[] {
+  const inBusinessWindow = isWorkingDay() && isWorkingHour();
+  return getEnabledBanks().filter((b) => b.roundTheClock || inBusinessWindow);
+}
+
 function isWorkingHour(): boolean {
   const hour = parseInt(new Intl.DateTimeFormat('en', { timeZone: getTimezone(), hour: 'numeric', hour12: false }).format(new Date()));
   return hour >= getStartHour() && hour < getEndHour();
 }
 
 /**
- * Run sync for all banks, or a specific bank if bankId is provided.
- * Used by the scheduler and the /api/refresh endpoint.
+ * Run sync for all enabled banks, or a specific bank if bankId is provided.
+ * Used by the /api/refresh endpoint — a manual refresh ignores the schedule
+ * window and syncs whatever was requested.
  */
 export async function runSync(bankId?: string): Promise<void> {
+  const banks = getEnabledBanks();
+  if (bankId) {
+    const bank = banks.find((b) => b.id === bankId);
+    if (!bank) {
+      logger.warn(`Unknown bank id: ${bankId}`);
+      return;
+    }
+    await runSyncForBanks([bank]);
+  } else {
+    await runSyncForBanks(banks);
+  }
+}
+
+/**
+ * Sync balances then statements for the given adapters. Adapters are reused
+ * across both so statement sync inherits the already-authenticated session.
+ * Guarded by {@link isSyncing} so the two scheduler tasks never overlap and
+ * contend for the shared browser.
+ */
+async function runSyncForBanks(banks: BankAdapter[]): Promise<void> {
+  // Skip banks whose operator-driven SMS login is mid-flow: syncing calls
+  // adapter.login() → resetContext(), which would close the browser context
+  // holding the pending SMS page and abort the operator's code entry.
+  const list = banks.filter((b) => {
+    const awaiting = getInteractiveAuth(b.id)?.status() === 'awaiting_sms';
+    if (awaiting) logger.info('Skipping sync — interactive SMS login in progress', { bank: b.id });
+    return !awaiting;
+  });
+
+  if (list.length === 0) return;
   if (isSyncing) {
-    logger.warn('Sync already in progress — skipping');
+    logger.warn('Sync already in progress — skipping', { banks: list.map((b) => b.id) });
     return;
   }
   isSyncing = true;
   try {
-    // Instantiate adapters once — reused for both balance and statement sync
-    // so statement sync inherits the already-authenticated browser session.
-    const banks = getEnabledBanks();
-
-    let activeBanks: BankAdapter[];
-    if (bankId) {
-      const bank = banks.find((b) => b.id === bankId);
-      if (!bank) {
-        logger.warn(`Unknown bank id: ${bankId}`);
-        return;
-      }
+    for (const bank of list) {
       await syncBankBalances(bank);
-      activeBanks = [bank];
-    } else {
-      await syncAllBanks(banks);
-      activeBanks = banks;
     }
-
-    await syncAllStatements(undefined, undefined, activeBanks);
+    await syncAllStatements(undefined, undefined, list);
   } finally {
     isSyncing = false;
   }

@@ -41,6 +41,12 @@ export interface BankAdapter {
   readonly id: string;
   /** Human-readable name for logs */
   readonly name: string;
+  /**
+   * When true, this bank is synced around the clock (every interval, all days)
+   * instead of only during the business-hours window. Retail/physical-person
+   * banks (e.g. iParitet) operate 24/7, unlike corporate banking systems.
+   */
+  readonly roundTheClock?: boolean;
 
   isLoggedIn(): Promise<boolean>;
   login(): Promise<void>;
