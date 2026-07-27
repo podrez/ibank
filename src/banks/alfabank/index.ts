@@ -1,7 +1,7 @@
 import { Page } from 'playwright';
 import { BankAdapter, ScrapedAccount, ScrapedTransaction, StatementRequest } from '../types';
 import { clearSession } from '../../scraper/browser';
-import { login, isLoggedIn } from './auth';
+import { login, isLoggedIn, resetAutoLoginBlock } from './auth';
 import { scrapeAccounts } from './accounts';
 import { scrapeStatement as doScrapeStatement } from './statements';
 
@@ -34,8 +34,9 @@ export class AlfabankAdapter implements BankAdapter {
 
   async resetSession(): Promise<void> {
     this.activePage = null;
-    // Credentials changed / explicit logout → drop the persisted SMS session too,
-    // so the next login goes through the interactive flow with the new details.
+    // Credentials changed / explicit logout → drop the persisted session too, and
+    // re-enable automatic login so the new details are tried on the next sync.
+    resetAutoLoginBlock();
     await clearSession(this.id);
   }
 }

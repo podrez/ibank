@@ -86,14 +86,19 @@ Scheduler (node-cron)
 
 ### Interactive SMS login (Alfa-Bank)
 
-Alfa-Bank BY requires an SMS one-time code on every fresh login. The **scheduled
-scraper never submits credentials** — doing so would trigger an SMS every cycle
-and get rate-limited/blocked. Instead:
+Alfa-Bank BY asks for an SMS one-time code only when it challenges a new
+device/session — once that has been confirmed, an ordinary login/password sign-in
+goes straight through. The session dies overnight, so:
 
-- Automated `login()` in `src/banks/alfabank/auth.ts` is **session-only**: it reuses
-  the session persisted to `./data/sessions/<bank>.json` (cookies + localStorage). If
-  the session is gone it throws `ReauthRequiredError` (`src/auth/interactive.ts`) —
-  deliberately **not** retryable, so no SMS is fired automatically.
+- Automated `login()` in `src/banks/alfabank/auth.ts` first reuses the session
+  persisted to `./data/sessions/<bank>.json` (cookies + localStorage) and, if that
+  is gone, **submits credentials** and waits for the cabinet.
+- If the bank actually holds on the SMS prompt (or rejects the credentials),
+  `login()` throws `ReauthRequiredError` (`src/auth/interactive.ts`) **and blocks
+  further automatic login attempts** for `AUTO_LOGIN_BLOCK_MS` (6 h) — so a cron
+  tick can never fire an SMS (or a bad-password attempt) every cycle. The block is
+  lifted by a successful interactive login or by `resetSession()` (credentials
+  changed).
 - An operator restores access from the settings UI (Банки → «Вход по SMS»): the
   two-step flow (`/api/auth/alfabank/start` → `/api/auth/alfabank/sms`) fills
   credentials, waits for the bank's SMS, accepts the code, and persists the session.

@@ -61,47 +61,138 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
   }
 }
 
+// ── Auto-login guard ──────────────────────────────────────────────────────────
+//
+// Alfa asks for an SMS only when it challenges a new device/session — an ordinary
+// login/password sign-in on an already-trusted device goes straight through. So
+// the scheduler DOES submit credentials (otherwise the session dying overnight
+// means a manual click every morning). The moment the bank actually holds on the
+// SMS prompt, or rejects the credentials, automatic login is blocked until an
+// operator completes the interactive flow — so a cron tick can never fire an SMS
+// (or a bad-password attempt) every cycle.
+const AUTO_LOGIN_BLOCK_MS = 6 * 60 * 60_000;
+let autoLoginBlockedUntil = 0;
+let autoLoginBlockReason = '';
+
+function blockAutoLogin(reason: string): void {
+  autoLoginBlockedUntil = Date.now() + AUTO_LOGIN_BLOCK_MS;
+  autoLoginBlockReason = reason;
+  logger.warn('[alfabank] Automatic login blocked — operator action required', { reason });
+}
+
+/** Reason string while automatic credential login is blocked, else null. */
+function autoLoginBlock(): string | null {
+  if (Date.now() >= autoLoginBlockedUntil) return null;
+  return autoLoginBlockReason;
+}
+
+/** Re-enable automatic credential login (successful interactive login / creds changed). */
+export function resetAutoLoginBlock(): void {
+  autoLoginBlockedUntil = 0;
+  autoLoginBlockReason = '';
+}
+
 /**
- * Automated (scheduler) login — SESSION-ONLY.
+ * Automated (scheduler) login.
  *
- * Never fills credentials, because Alfa now sends an SMS on every fresh login
- * and doing that each cycle gets rate-limited/blocked. It only reuses the
- * session persisted by the interactive SMS flow. If that session is gone, it
- * throws {@link ReauthRequiredError} so an operator re-authenticates via the UI.
+ * Reuses the persisted session and, if it is gone, signs in with credentials —
+ * that normally succeeds without an SMS, so the morning sync no longer needs an
+ * operator. Only if the bank genuinely holds on the SMS prompt (or rejects the
+ * credentials) does it throw {@link ReauthRequiredError} and block further
+ * automatic attempts, so no SMS is fired every cycle.
  */
 export async function login(): Promise<Page> {
-  const bankLogin = getConfig('ALFABANK_LOGIN') ?? getConfig('BANK_LOGIN');
-  const bankPassword = getConfig('ALFABANK_PASSWORD') ?? getConfig('BANK_PASSWORD');
-  if (!bankLogin || !bankPassword) {
-    throw new Error('ALFABANK_LOGIN and ALFABANK_PASSWORD must be set');
-  }
+  requireCredentials();
 
   const ctx = await getBrowserContext(BANK_ID);
   const page = await ctx.newPage();
 
   try {
-    logger.debug('[alfabank] Restoring session (session-only login)');
+    logger.debug('[alfabank] Restoring session');
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
     await saveDebugSnapshot(page, 'alfabank-01-session-check');
 
-    const loginFormVisible = await page
-      .locator('input[name="Password"]')
-      .isVisible({ timeout: 3000 })
-      .catch(() => false);
+    if (await sessionIsValid(page)) {
+      await saveSession(BANK_ID);
+      logger.info('[alfabank] Session valid — authenticated without SMS', { url: page.url() });
+      return page;
+    }
 
-    if (loginFormVisible || !(await isLoggedIn(page))) {
-      throw new ReauthRequiredError(BANK_ID);
+    const blocked = autoLoginBlock();
+    if (blocked) throw new ReauthRequiredError(BANK_ID, blocked);
+
+    logger.info('[alfabank] No valid session — logging in with credentials');
+    const outcome = await fillAndSubmitCredentials(page);
+    if (outcome === 'awaiting_sms') {
+      blockAutoLogin('Альфа-Банк запросил SMS-код — откройте Настройки → Банки → «Вход по SMS»');
+      throw new ReauthRequiredError(BANK_ID, autoLoginBlockReason);
     }
 
     await saveSession(BANK_ID);
-    logger.info('[alfabank] Session valid — authenticated without SMS', { url: page.url() });
+    logger.info('[alfabank] Login successful (no SMS required)', { url: page.url() });
     return page;
   } catch (err) {
     await page.close().catch(() => null);
     if (isReauthRequired(err)) throw err;
-    throw new Error(`[alfabank] Session restore failed: ${(err as Error).message}`);
+    const message = (err as Error).message;
+    if (/login rejected by bank/i.test(message)) {
+      // Wrong/expired credentials — retrying every cycle would lock the account.
+      blockAutoLogin(`Банк отклонил вход: ${message}`);
+      throw new ReauthRequiredError(BANK_ID, autoLoginBlockReason);
+    }
+    throw new Error(`[alfabank] Login failed: ${message}`);
   }
+}
+
+function requireCredentials(): { bankLogin: string; bankPassword: string } {
+  const bankLogin = getConfig('ALFABANK_LOGIN') ?? getConfig('BANK_LOGIN');
+  const bankPassword = getConfig('ALFABANK_PASSWORD') ?? getConfig('BANK_PASSWORD');
+  if (!bankLogin || !bankPassword) {
+    throw new Error('ALFABANK_LOGIN and ALFABANK_PASSWORD must be set');
+  }
+  return { bankLogin, bankPassword };
+}
+
+/** True when the landing page is the authenticated cabinet, not the login form. */
+async function sessionIsValid(page: Page): Promise<boolean> {
+  const loginFormVisible = await page
+    .locator('input[name="Password"]')
+    .isVisible({ timeout: 3000 })
+    .catch(() => false);
+  if (loginFormVisible) return false;
+  return isLoggedIn(page);
+}
+
+/**
+ * Fill the login/password fields, submit, and wait until the bank either lands on
+ * the cabinet or shows the SMS prompt. Shared by the automated and interactive
+ * login paths.
+ */
+async function fillAndSubmitCredentials(page: Page): Promise<'logged_in' | 'awaiting_sms'> {
+  const { bankLogin, bankPassword } = requireCredentials();
+
+  const usernameInput = await waitForInput(page, [
+    'input[name="UserName"]',
+    'input[autocomplete="username"]',
+    'form input[type="text"]',
+  ]);
+  await usernameInput.click();
+  await usernameInput.fill(bankLogin);
+
+  const passwordInput = await waitForInput(page, [
+    'input[name="Password"]',
+    'input[type="password"]',
+  ]);
+  await passwordInput.click();
+  await passwordInput.fill(bankPassword);
+
+  await saveDebugSnapshot(page, 'alfabank-sms-01-fields-filled');
+  await clickSubmit(page);
+
+  const outcome = await waitForSmsOrDashboard(page);
+  await saveDebugSnapshot(page, 'alfabank-sms-02-after-submit');
+  return outcome;
 }
 
 // ── Interactive SMS login (operator-driven, via the settings UI) ────────────────
@@ -126,67 +217,49 @@ async function cancelPending(): Promise<void> {
  * held open until submitSmsCode() is called.
  */
 async function startInteractiveLogin(): Promise<AuthStartResult> {
-  const bankLogin = getConfig('ALFABANK_LOGIN') ?? getConfig('BANK_LOGIN');
-  const bankPassword = getConfig('ALFABANK_PASSWORD') ?? getConfig('BANK_PASSWORD');
-  if (!bankLogin || !bankPassword) {
-    throw new Error('ALFABANK_LOGIN and ALFABANK_PASSWORD must be set');
-  }
+  requireCredentials();
 
   await cancelPending();
 
   const ctx = await getBrowserContext(BANK_ID);
   const page = await ctx.newPage();
+  // Reserve `pending` immediately so status() reports awaiting_sms for the whole
+  // attempt — this makes the scheduler skip this bank and prevents its
+  // adapter.login()/resetContext() from closing this page mid-flow.
+  pending = { page, createdAt: Date.now() };
 
   try {
     logger.info('[alfabank] Interactive login started');
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    const loginFormVisible = await page
-      .locator('input[name="Password"]')
-      .isVisible({ timeout: 2500 })
-      .catch(() => false);
-
-    if (!loginFormVisible && (await isLoggedIn(page))) {
+    if (await sessionIsValid(page)) {
       await saveSession(BANK_ID);
       await page.close().catch(() => null);
+      pending = null;
+      resetAutoLoginBlock();
       return { stage: 'logged_in', message: 'Сессия ещё активна — вход не потребовался.' };
     }
 
-    const usernameInput = await waitForInput(page, [
-      'input[name="UserName"]',
-      'input[autocomplete="username"]',
-      'form input[type="text"]',
-    ]);
-    await usernameInput.click();
-    await usernameInput.fill(bankLogin);
-
-    const passwordInput = await waitForInput(page, [
-      'input[name="Password"]',
-      'input[type="password"]',
-    ]);
-    await passwordInput.click();
-    await passwordInput.fill(bankPassword);
-
-    await saveDebugSnapshot(page, 'alfabank-sms-01-fields-filled');
-    await clickSubmit(page);
-
-    const outcome = await waitForSmsOrDashboard(page);
-    await saveDebugSnapshot(page, 'alfabank-sms-02-after-submit');
+    const outcome = await fillAndSubmitCredentials(page);
 
     if (outcome === 'logged_in') {
       await saveSession(BANK_ID);
       await page.close().catch(() => null);
+      pending = null;
+      resetAutoLoginBlock();
       logger.info('[alfabank] Interactive login completed without SMS');
       return { stage: 'logged_in', message: 'Вход выполнен, SMS не потребовался.' };
     }
 
+    // Refresh the timeout window to start when the SMS actually arrived.
     pending = { page, createdAt: Date.now() };
     logger.info('[alfabank] Awaiting SMS code from operator');
     return { stage: 'awaiting_sms', message: 'Банк отправил SMS-код. Введите его для завершения входа.' };
   } catch (err) {
     await saveDebugSnapshot(page, 'alfabank-sms-error-start');
     await page.close().catch(() => null);
+    pending = null;
     throw err instanceof Error ? err : new Error(String(err));
   }
 }
@@ -240,6 +313,7 @@ async function submitSmsCode(code: string): Promise<void> {
 
   await page.close().catch(() => null);
   pending = null;
+  resetAutoLoginBlock();
 }
 
 registerInteractiveAuth(BANK_ID, {
