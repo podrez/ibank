@@ -94,6 +94,8 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 
 `DB_PATH`, `API_PORT`, `BASE_PATH` and `SESSION_DIR` can only be set via `.env` / environment (they require a process restart to take effect). All other variables can also be changed at runtime through the Settings panel in the web UI.
 
+> **Docker: where to put `API_PORT`.** `docker-compose.yml` interpolates `${API_PORT}` for both the published port and the value passed into the container. Compose reads that interpolation from the **`.env` file sitting next to `docker-compose.yml`** — *not* from `stack.env` (`env_file` is only injected into the container, it is never used for interpolation). In Portainer, set it as a stack environment variable instead, which covers both. Setting it only in `stack.env` under plain `docker compose` leaves the published port at `3000`.
+
 | Variable | Default | Description |
 |---|---|---|
 | `ALFABANK_LOGIN` | — | Alfa-Bank BY login (leave empty to disable) |
@@ -109,7 +111,7 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 | `IPARITET_PASSWORD` | — | iParitet password |
 | `DB_PATH` | `./data/accounts.db` | Path to SQLite database file |
 | `SESSION_DIR` | `./data/sessions` | Where per-bank browser sessions (cookies) are persisted so an SMS login is not repeated every cycle |
-| `API_PORT` | `3000` | HTTP port for the REST API |
+| `API_PORT` | `3000` | HTTP port for the REST API (in Docker it is both the in-container port and the published host port — see below) |
 | `BASE_PATH` | — | Sub-path prefix when served behind a reverse proxy (e.g. `/ibank`); leave empty when the app is at the root |
 | `API_KEY` | — | Secret key to protect the API |
 | `APP_TIMEZONE` | `Europe/Minsk` | IANA timezone used for scheduling, today-totals calculations, and browser locale |
