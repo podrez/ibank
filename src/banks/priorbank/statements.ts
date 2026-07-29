@@ -1,11 +1,60 @@
-﻿import { Page } from 'playwright';
+import { Page } from 'playwright';
+import fs from 'fs';
 import { ScrapedTransaction, StatementRequest } from '../types';
-import { dismissKendoOverlay } from './auth';
 import { logger } from '../../logger';
-import { makeSnapper } from '../../utils/debug';
+import { parseDate } from '../../utils/dates';
+import { getConfig } from '../../config/store';
 
 const BASE_URL = 'https://www.ibank.priorbank.by';
-const STATEMENT_URL = `${BASE_URL}/v1/Cabinet/101`;
+
+/**
+ * Statements live in Priorbank's NEW cabinet (React/Ant Design, `/Cabinet/*`),
+ * which exposes a JSON API under `/v2/`. The old Kendo UI cabinet (`/v1/`) still
+ * serves the dashboard — that is where balances are scraped from — but its
+ * statement page (`/v1/Cabinet/101`) is gone: the id no longer resolves, the bank
+ * quietly serves the desktop instead, and scraping yielded 0 rows every cycle.
+ */
+const CABINET_URL = `${BASE_URL}/Cabinet/1`;
+const DEBUG_DIR = './data/debug';
+
+/** Minsk is UTC+3 year-round (no DST); the API expects an explicit offset. */
+const TZ_OFFSET = '+03:00';
+
+interface ApiEnvelope<T> {
+  data?: T;
+  success?: boolean;
+  errorMessage?: string | null;
+}
+
+interface AccountLookup {
+  accTitle: string;
+  accNumber: string;
+  currCode: number;
+  rubVal: number;
+}
+
+interface RawTransaction {
+  docId?: string;
+  docDate?: string;
+  docN?: string;
+  /** Bank operation code */
+  opr?: string;
+  dbAmount?: string;
+  crAmount?: string;
+  naznText?: string;
+  iso?: string;
+  corrBankCode?: string;
+  corrName?: string;
+  unp?: string;
+  corrAccount?: string;
+}
+
+interface StatementData {
+  generalInfo?: Array<{ key: string; value: string }>;
+  accountSummaries?: Array<Record<string, string | null>>;
+  transactions?: RawTransaction[];
+  cacheKey?: string;
+}
 
 export async function scrapeStatement(
   page: Page,
@@ -17,346 +66,159 @@ export async function scrapeStatement(
     to: req.dateTo,
   });
 
-  const saveSnap = makeSnapper(page, 'priorbank', req.accountNumber);
+  await ensureCabinet(page);
 
-  // Step 1: Navigate to statement page
-  logger.debug('[priorbank:statement] Step 1: Navigating to statement page', { url: STATEMENT_URL });
-  try {
-    await page.goto(STATEMENT_URL, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-    await page.waitForTimeout(2_000);
-  } catch (err) {
-    logger.error('[priorbank:statement] Failed to navigate to statement page', { error: (err as Error).message });
-    await saveSnap('00-nav-error');
-    return [];
-  }
+  // Step 1: resolve the account descriptor the statement call requires
+  const accData = await resolveAccount(page, req.accountNumber);
+  logger.debug('[priorbank:statement] Resolved account', { ...accData });
 
-  const urlAfterNav = page.url();
-  logger.debug('[priorbank:statement] Step 1 result: current URL', { url: urlAfterNav });
+  // Step 2: fetch the statement
+  const envelope = await apiCall<StatementData>(page, '/v2/Accounts/GetStatementData', {
+    accData,
+    dateFrom: `${req.dateFrom}T00:00:00${TZ_OFFSET}`,
+    dateTo: `${req.dateTo}T00:00:00${TZ_OFFSET}`,
+    // "Дополнительно" checkboxes of the UI form — all on, so the response carries
+    // the payment purpose and the counterparty name.
+    isNazn: 1,
+    isKor: 1,
+    isRevaluation: 1,
+    sortByAmount: 1,
+  });
 
-  if (urlAfterNav.includes('login') || urlAfterNav.includes('Login')) {
-    logger.error('[priorbank:statement] Redirected to login — session expired');
-    await saveSnap('00-session-expired');
-    return [];
-  }
+  saveDebugJson(`priorbank-stmt-${req.accountNumber}-response`, envelope);
 
-  await dismissKendoOverlay(page);
-  await saveSnap('01-statement-page-loaded');
+  const raw = envelope.data?.transactions ?? [];
+  logger.info(`[priorbank:statement] API returned ${raw.length} transactions`);
 
-  // Step 2: Select account from Kendo dropdown
-  logger.debug('[priorbank:statement] Step 2: Looking for account selector');
-  const accountSelected = await selectAccount(page, req.accountNumber);
-  logger.debug('[priorbank:statement] Step 2 result: account selected', { success: accountSelected });
+  return mapTransactions(raw, req.accountNumber);
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+/**
+ * The `/v2/` calls are same-origin fetches carrying the session cookie, so any
+ * page on the bank's origin works — but land on the cabinet when we are elsewhere.
+ */
+async function ensureCabinet(page: Page): Promise<void> {
+  if (page.url().startsWith(BASE_URL)) return;
+
+  logger.debug('[priorbank:statement] Navigating to the new cabinet', { url: CABINET_URL });
+  await page.goto(CABINET_URL, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.waitForTimeout(1_500);
-  await saveSnap('02-account-selected');
 
-  // Step 3: Fill date range
-  logger.debug('[priorbank:statement] Step 3: Filling date range', { from: req.dateFrom, to: req.dateTo });
-  const datesSet = await fillDateRange(page, req.dateFrom, req.dateTo);
-  logger.debug('[priorbank:statement] Step 3 result: dates filled', { success: datesSet });
-  await saveSnap('03-dates-filled');
-
-  // Step 4: Submit — Priorbank returns server-rendered HTML (no JSON API)
-  logger.debug('[priorbank:statement] Step 4: Clicking submit and waiting for page reload');
-  await clickSubmitButton(page);
-  await saveSnap('04-after-submit');
-
-  // Step 5: Parse Kendo Grid rows
-  logger.debug('[priorbank:statement] Step 5: Parsing Kendo Grid data from DOM');
-  const transactions = await domScrape(page, req);
-  logger.debug('[priorbank:statement] Step 5 result', { count: transactions.length });
-  return transactions;
+  if (/\/login/i.test(page.url())) {
+    throw new Error('[priorbank:statement] Session expired — redirected to login');
+  }
 }
 
-// ── Step 2: Account selection ─────────────────────────────────────────────────
+// ── API access ────────────────────────────────────────────────────────────────
 
-async function selectAccount(page: Page, accountNumber: string): Promise<boolean> {
-  const selects = await page.locator('select').all();
-  logger.debug('[priorbank:statement] Native <select> elements found', { count: selects.length });
-
-  const kendoDropdowns = await page.locator('[data-role="dropdownlist"], [data-role="combobox"], .k-dropdown, .k-combobox').all();
-  logger.debug('[priorbank:statement] Kendo dropdowns found', { count: kendoDropdowns.length });
-
-  for (let i = 0; i < Math.min(selects.length, 5); i++) {
-    const text = await selects[i].innerText().catch(() => '?');
-    const name = await selects[i].getAttribute('name').catch(() => '?');
-    logger.debug(`[priorbank:statement]   select[${i}] name="${name}" text="${text.slice(0, 100)}"`);
-  }
-
-  const kendoCandidates = [
-    '[data-role="dropdownlist"]',
-    '[data-role="combobox"]',
-    '.k-dropdown-wrap',
-    '.k-picker-wrap',
-  ];
-
-  for (const sel of kendoCandidates) {
-    const els = await page.locator(sel).all();
-    for (let i = 0; i < els.length; i++) {
-      const el = els[i];
-      const text = await el.innerText().catch(() => '');
-      logger.debug(`[priorbank:statement]   Kendo ${sel}[${i}] text="${text.slice(0, 80)}"`);
-
-      if (
-        text.includes('BY') ||
-        text.toLowerCase().includes('счет') ||
-        text.toLowerCase().includes('account') ||
-        text.toLowerCase().includes('счёт')
-      ) {
-        logger.debug(`[priorbank:statement]   → Account dropdown found (${sel}[${i}]): "${text.slice(0, 60)}"`);
-        await el.click().catch(() => null);
-        await page.waitForTimeout(500);
-
-        const optionClicked = await clickKendoOption(page, accountNumber);
-        if (optionClicked) return true;
+/**
+ * Call a `/v2/` endpoint from inside the page so the browser attaches the session
+ * cookie and the SPA's own origin headers. GET when `body` is omitted, else POST.
+ */
+async function apiCall<T>(page: Page, path: string, body?: unknown): Promise<ApiEnvelope<T>> {
+  const result = await page.evaluate(
+    async (p: { path: string; body: string | null }) => {
+      try {
+        const init: RequestInit = {
+          method: p.body === null ? 'GET' : 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          credentials: 'same-origin',
+        };
+        if (p.body !== null) init.body = p.body;
+        const res = await fetch(p.path, init);
+        return { status: res.status, text: await res.text() };
+      } catch (err) {
+        return { status: 0, text: `fetch failed: ${String(err)}` };
       }
-    }
+    },
+    { path, body: body === undefined ? null : JSON.stringify(body) },
+  );
+
+  if (result.status === 401 || result.status === 403) {
+    throw new Error(`[priorbank:statement] Session expired — ${path} returned ${result.status}`);
+  }
+  if (result.status !== 200) {
+    throw new Error(`[priorbank:statement] ${path} returned HTTP ${result.status}: ${result.text.slice(0, 200)}`);
   }
 
-  for (const sel of ['select[name*="account" i]', 'select[name*="Account"]', 'select[id*="account" i]', 'select']) {
-    const selEl = page.locator(sel).first();
-    if (await selEl.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      const options = await selEl.locator('option').all();
-      logger.debug(`[priorbank:statement]   Native select "${sel}" has ${options.length} options`);
-      for (const opt of options) {
-        const val = await opt.getAttribute('value').catch(() => '');
-        const text = await opt.innerText().catch(() => '');
-        logger.debug(`[priorbank:statement]     option value="${val}" text="${text.slice(0, 60)}"`);
-        if (val?.includes(accountNumber) || text.includes(accountNumber)) {
-          logger.debug(`[priorbank:statement]   → Selecting option: value="${val}"`);
-          await selEl.selectOption({ value: val! });
-          return true;
-        }
-      }
+  let envelope: ApiEnvelope<T>;
+  try {
+    envelope = JSON.parse(result.text) as ApiEnvelope<T>;
+  } catch {
+    // A login redirect answers 200 with an HTML body — treat that as a dead session
+    // rather than as "no data", so the caller re-logs in instead of storing nothing.
+    if (/<html|<!doctype/i.test(result.text)) {
+      throw new Error(`[priorbank:statement] Session expired — ${path} answered with HTML`);
     }
+    throw new Error(`[priorbank:statement] ${path} returned non-JSON: ${result.text.slice(0, 200)}`);
   }
 
-  logger.warn('[priorbank:statement] Could not find account selector — proceeding without selection');
-  return false;
-}
-
-async function clickKendoOption(page: Page, accountNumber: string): Promise<boolean> {
-  const listItems = await page.locator('.k-list li, .k-popup li, [role="option"]').all();
-  logger.debug(`[priorbank:statement]   Kendo list items: ${listItems.length}`);
-  for (const item of listItems) {
-    const text = await item.innerText().catch(() => '');
-    logger.debug(`[priorbank:statement]     option: "${text.slice(0, 80)}"`);
-    if (text.includes(accountNumber)) {
-      logger.debug(`[priorbank:statement]   → Clicking Kendo option: "${text.slice(0, 60)}"`);
-      await item.click();
-      return true;
-    }
+  if (envelope.success === false || envelope.errorMessage) {
+    throw new Error(`[priorbank:statement] ${path} failed: ${envelope.errorMessage ?? 'unknown error'}`);
   }
-  return false;
-}
 
-// ── Step 3: Fill date range ───────────────────────────────────────────────────
-
-/**
- * Convert ISO date (yyyy-mm-dd) to digit sequence for Kendo DatePicker masked input.
- * Priorbank uses dd.mm.yyyy mask — type digits left to right: ddmmyyyy.
- * e.g. "2026-04-01" → "01042026"
- */
-function isoToMaskDigits(iso: string): string {
-  const [yyyy, mm, dd] = iso.split('-');
-  return `${dd}${mm}${yyyy}`;
+  return envelope;
 }
 
 /**
- * Fill a Kendo DatePicker field reliably.
- * Single click to focus → Home to jump to first segment (dd) → type digits one by one.
+ * `GetStatementData` identifies the account by a descriptor, not by number alone —
+ * `currCode`/`rubVal` come from the lookup endpoint.
  */
-async function fillKendoDate(
-  page: Page,
-  locator: import('playwright').Locator,
-  isoDate: string,
-  label: string,
-): Promise<void> {
-  const digits = isoToMaskDigits(isoDate);
-  logger.debug(`[priorbank:statement]   Filling ${label}: "${isoDate}" → digits "${digits}"`);
+async function resolveAccount(page: Page, accountNumber: string): Promise<AccountLookup> {
+  const envelope = await apiCall<AccountLookup[]>(page, '/v2/Accounts/GetAccountsLookup');
+  const accounts = envelope.data ?? [];
 
-  await locator.click();
-  await page.waitForTimeout(100);
-  await page.keyboard.press('Home');
-  await page.waitForTimeout(50);
-
-  for (const ch of digits) {
-    await page.keyboard.press(ch);
-    await page.waitForTimeout(40);
+  const match = accounts.find((a) => a.accNumber === accountNumber);
+  if (!match) {
+    throw new Error(
+      `[priorbank:statement] Account ${accountNumber} not available. ` +
+      `Bank lists: ${accounts.map((a) => a.accNumber).join(', ') || '(none)'}`,
+    );
   }
 
-  await page.waitForTimeout(200);
-  const val = await locator.inputValue().catch(() => '?');
-  logger.debug(`[priorbank:statement]   ${label} value after fill: "${val}"`);
+  return { accTitle: match.accTitle, accNumber: match.accNumber, currCode: match.currCode, rubVal: match.rubVal };
 }
 
-async function fillDateRange(page: Page, dateFrom: string, dateTo: string): Promise<boolean> {
-  // Ensure "за период" radio is selected
-  const periodRadio = page.locator('#Periods_Period');
-  if (await periodRadio.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    const checked = await periodRadio.isChecked().catch(() => false);
-    if (!checked) {
-      logger.debug('[priorbank:statement]   Selecting "за период" radio button');
-      await periodRadio.click();
-      await page.waitForTimeout(300);
-    } else {
-      logger.debug('[priorbank:statement]   "за период" already selected');
-    }
-  } else {
-    logger.warn('[priorbank:statement]   #Periods_Period radio not found');
-  }
+// ── Mapping ───────────────────────────────────────────────────────────────────
 
-  // Kendo DatePicker fields identified by data-bind="value: DateFrom/DateTo"
-  const fromEl = page.locator('input[data-bind*="DateFrom"]').first();
-  const toEl   = page.locator('input[data-bind*="DateTo"]').first();
-
-  const fromVisible = await fromEl.isVisible({ timeout: 2_000 }).catch(() => false);
-  const toVisible   = await toEl.isVisible({ timeout: 2_000 }).catch(() => false);
-
-  logger.debug('[priorbank:statement]   Date fields visible', { fromVisible, toVisible });
-
-  if (fromVisible) {
-    await fillKendoDate(page, fromEl, dateFrom, 'DateFrom');
-  } else {
-    logger.warn('[priorbank:statement]   DateFrom input not found (data-bind*="DateFrom")');
-  }
-
-  if (toVisible) {
-    await fillKendoDate(page, toEl, dateTo, 'DateTo');
-  } else {
-    logger.warn('[priorbank:statement]   DateTo input not found (data-bind*="DateTo")');
-  }
-
-  return fromVisible && toVisible;
-}
-
-// ── Step 4: Submit ────────────────────────────────────────────────────────────
-
-async function clickSubmitButton(page: Page): Promise<void> {
-  const submitSelectors = [
-    'button:has-text("Применить")',
-    'button:has-text("Показать")',
-    'button:has-text("Сформировать")',
-    'button:has-text("Найти")',
-    'button:has-text("Поиск")',
-    'button:has-text("Получить")',
-    'button[type="submit"]',
-    'input[type="submit"]',
-  ];
-
-  const buttons = await page.locator('button:visible, input[type="submit"]:visible').all();
-  logger.debug(`[priorbank:statement] Visible buttons: ${buttons.length}`);
-  for (let i = 0; i < Math.min(buttons.length, 10); i++) {
-    const text = await buttons[i].innerText().catch(() => '?');
-    const type = await buttons[i].getAttribute('type').catch(() => '?');
-    logger.debug(`[priorbank:statement]   button[${i}] type="${type}" text="${text.slice(0, 60)}"`);
-  }
-
-  for (const sel of submitSelectors) {
-    const btn = page.locator(sel).first();
-    if (await btn.isVisible({ timeout: 800 }).catch(() => false)) {
-      const text = await btn.innerText().catch(() => sel);
-      logger.debug(`[priorbank:statement]   → Clicking submit: "${text.slice(0, 40)}" (${sel})`);
-      await btn.click();
-      // Wait for Kendo Grid data rows — not networkidle, which would block on
-      // third-party fraud-detection calls (fp-back.facct.by) for ~27 seconds.
-      await page.waitForSelector('tr[data-uid]', { timeout: 30_000 }).catch(() => null);
-      return;
-    }
-  }
-
-  logger.warn('[priorbank:statement] No submit button found');
-}
-
-// ── Step 5: DOM scraping — Kendo Grid ────────────────────────────────────────
-
-/**
- * Kendo Grid column layout (confirmed from page HTML):
- *  0  DocumentDate        dd.mm.yyyy
- *  1  DocumentNumber      reference
- *  2  DestinationPayment  description (display:none — use textContent)
- *  3  FactTime247         (hidden, skip)
- *  4  OperationAttachments (skip)
- *  5  Iso                 internal numeric code (skip)
- *  6  Валюта корреспондента "BYN"/"EUR" etc. (display:none — use textContent)
- *  7  CorrespondentBankCode (hidden, skip)
- *  8  CorrespondentName   (visible)
- *  9  Unp                 (hidden, skip)
- * 10  AccountNumber       correspondent IBAN (hidden, skip)
- * 11  DebitAmount         e.g. "386.52" or "1 500.00"
- * 12  CreditAmount
- */
-async function domScrape(page: Page, req: StatementRequest): Promise<ScrapedTransaction[]> {
-  const fallbackCurrency = currencyFromAccount(req.accountNumber);
-
-  // Extract all rows in one browser-side evaluate() instead of per-cell IPC round-trips.
-  // 474 rows × 8 Playwright calls ≈ 30 s; one evaluate() ≈ <1 s.
-  // No TypeScript syntax inside the callback — tsx injects __name helpers that
-  // are not available when the function is serialised and run in the browser.
-  // Inline all cell reads — avoid named arrow functions inside evaluate because
-  // tsx/esbuild injects __name() helpers for them, which are not available when
-  // the callback is serialised and executed inside the browser.
-  const rawRows = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('tr[data-uid]'));
-    const out: Array<{date:string;docNumber:string;description:string;currency:string;counterpartyName:string;unp:string;counterpartyAccount:string;debit:string;credit:string}> = [];
-    rows.forEach(function(row) {
-      const cells = row.querySelectorAll('td');
-      if (cells.length < 13) return;
-      out.push({
-        date:               (cells[0].textContent  || '').trim(),
-        docNumber:          (cells[1].textContent  || '').trim(),
-        description:        (cells[2].textContent  || '').trim(),
-        currency:           (cells[6].textContent  || '').trim(),
-        counterpartyName:   (cells[8].textContent  || '').trim(),
-        unp:                (cells[9].textContent  || '').trim(),
-        counterpartyAccount:(cells[10].textContent || '').trim(),
-        debit:              (cells[11].textContent || '').trim(),
-        credit:             (cells[12].textContent || '').trim(),
-      });
-    });
-    return out;
-  }) as Array<{ date: string; docNumber: string; description: string; currency: string; counterpartyName: string; unp: string; counterpartyAccount: string; debit: string; credit: string }>;
-
-  logger.info(`[priorbank:statement] DOM: found ${rawRows.length} Kendo Grid data rows`);
-
-  if (rawRows.length === 0) {
-    logger.warn('[priorbank:statement] ✗ No tr[data-uid] rows — check snapshot 04-after-submit.png');
-    return [];
-  }
-
-  const parseAmt = (s: string) => {
-    const n = parseFloat(s.replace(/\s+/g, '').replace(',', '.'));
-    return isNaN(n) ? 0 : Math.abs(n);
-  };
-
+function mapTransactions(raw: RawTransaction[], accountNumber: string): ScrapedTransaction[] {
+  const fallbackCurrency = currencyFromAccount(accountNumber);
   const transactions: ScrapedTransaction[] = [];
   let skipped = 0;
 
-  for (const r of rawRows) {
-    const dm = r.date.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-    if (!dm) { skipped++; continue; }
-    const transactionDate = `${dm[3]}-${dm[2]}-${dm[1]}`;
+  for (const r of raw) {
+    const transactionDate = parseDate(r.docDate ?? '');
+    if (!transactionDate) { skipped++; continue; }
 
-    const debit  = parseAmt(r.debit);
-    const credit = parseAmt(r.credit);
+    const debit = parseAmount(r.dbAmount);
+    const credit = parseAmount(r.crAmount);
     if (debit === 0 && credit === 0) { skipped++; continue; }
 
     transactions.push({
       transactionDate,
-      reference:          r.docNumber             || undefined,
-      description:        r.description,
-      debit:              debit  > 0 ? debit  : undefined,
-      credit:             credit > 0 ? credit : undefined,
-      currency:           r.currency              || fallbackCurrency,
-      counterpartyUnp:    r.unp                   || undefined,
-      counterpartyName:   r.counterpartyName      || undefined,
-      counterpartyAccount:r.counterpartyAccount   || undefined,
+      reference: r.docN || r.docId || undefined,
+      description: r.naznText ?? '',
+      debit: debit > 0 ? debit : undefined,
+      credit: credit > 0 ? credit : undefined,
+      currency: r.iso || fallbackCurrency,
+      counterpartyUnp: r.unp || undefined,
+      counterpartyName: r.corrName || undefined,
+      counterpartyAccount: r.corrAccount || undefined,
+      operationCode: r.opr || undefined,
     });
   }
 
-  logger.info(
-    `[priorbank:statement] DOM: parsed ${transactions.length} transactions, skipped ${skipped} rows`,
-  );
+  logger.info(`[priorbank:statement] Parsed ${transactions.length} transactions, skipped ${skipped}`);
   return transactions;
+}
+
+/** Amounts arrive as display strings: "10 931.50" (thousands separated by spaces/NBSP). */
+function parseAmount(s: string | undefined): number {
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/[\s ]/g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : Math.abs(n);
 }
 
 /** Derive ISO 4217 currency text from Priorbank account number (last 3 digits = numeric code). */
@@ -365,4 +227,14 @@ function currencyFromAccount(accountNumber: string): string {
     '933': 'BYN', '978': 'EUR', '840': 'USD', '643': 'RUB', '156': 'CNY',
   };
   return map[accountNumber.slice(-3)] ?? 'BYN';
+}
+
+function saveDebugJson(name: string, payload: unknown): void {
+  if (getConfig('DEBUG_SCREENSHOTS') !== 'true') return;
+  try {
+    if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
+    fs.writeFileSync(`${DEBUG_DIR}/${name}.json`, JSON.stringify(payload, null, 2), 'utf8');
+  } catch (err) {
+    logger.debug('[priorbank:statement] Failed to save debug JSON', { error: (err as Error).message });
+  }
 }

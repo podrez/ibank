@@ -12,8 +12,9 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
     const url = page.url();
     logger.debug('[priorbank] isLoggedIn check', { url });
 
-    // Any path under /v1/ is the authenticated cabinet area
-    if (url.includes('ibank.priorbank.by/v1/')) {
+    // Authenticated cabinet areas: the old Kendo UI one under /v1/ (dashboard,
+    // balances) and the new React one under /Cabinet/ (statements).
+    if (url.includes('ibank.priorbank.by/v1/') || /ibank\.priorbank\.by\/Cabinet\//i.test(url)) {
       return true;
     }
 

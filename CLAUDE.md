@@ -169,6 +169,42 @@ a **random** `id`, an empty `type=""` for the login field, and binds its control
 name/type/formcontrolname. Raw JSON is dumped to `./data/debug/iparitet-*.json` when
 `DEBUG_SCREENSHOTS=true`.
 
+### Priorbank: two cabinets, one session
+
+Priorbank runs **two** front-ends side by side on the same session cookie:
+
+- **Old cabinet** — `/v1/…`, Kendo UI, server-rendered. Still serves the desktop, and
+  **balances are scraped here** (`accounts.ts` intercepts the
+  `/v1/…/AccountsWidget/GetAccounts` XHR).
+- **New cabinet** — `/Cabinet/…`, React/Ant Design SPA with a JSON API under `/v2/`.
+  **Statements live here** (`statements.ts`).
+
+`isLoggedIn()` therefore accepts *both* `/v1/` and `/Cabinet/` URLs. Menu ids are
+**not stable**: the statement page used to be `/v1/Cabinet/101`, that id no longer
+resolves, and the bank silently serves the desktop instead — which surfaced as
+"0 transactions" every cycle rather than as an error. Do not hard-code a menu id;
+call the API.
+
+Statement flow (`src/banks/priorbank/statements.ts`) — all `fetch` from inside the
+page so the session cookie is attached, no DOM scraping:
+- `GET /v2/Accounts/GetAccountsLookup` → `{accTitle, accNumber, currCode, rubVal}[]`.
+  `GetStatementData` needs this whole descriptor, not just the account number.
+- `POST /v2/Accounts/GetStatementData` with
+  `{accData, dateFrom, dateTo, isNazn:1, isKor:1, isRevaluation:1, sortByAmount:1}`.
+  Dates are `yyyy-MM-ddT00:00:00+03:00` (Minsk is UTC+3 year-round). The `is*` flags
+  mirror the UI's "Дополнительно" checkboxes — without them the response drops the
+  payment purpose and the counterparty name.
+- Response: `{generalInfo[], accountSummaries[], transactions[]}`. Each transaction:
+  `docDate` (dd.mm.yyyy), `docN`, `dbAmount`/`crAmount` (display strings — `"10 931.50"`,
+  space-separated thousands), `naznText`, `iso`, `corrName`, `unp`, `corrAccount`, `opr`.
+  `accountSummaries` carries opening/turnover/closing balances (useful for reconciling).
+- The range limit is `GET /v2/Accounts/GetMaxStatementRangeInDays` (186 days).
+- A dead session answers `200` with an HTML login page; `apiCall` raises
+  "Session expired" on that so the caller re-logs in instead of storing zero rows.
+
+Other useful `/v2/` endpoints seen in the new cabinet: `User/CheckSessionAlive`,
+`User/GetUserMenu`, `Accounts/GetAccountList` (balances, if the old cabinet ever dies).
+
 ### Scraper selector adjustment
 
 If a bank's scraper can't find account cards (DOM scraping path), set `DEBUG_SCREENSHOTS=true` in `.env`. Each bank saves its debug files with a bank prefix:
@@ -184,7 +220,7 @@ Update `domScrape()` in the relevant `src/banks/<bank>/accounts.ts`.
 
 If statement scraping fails (DOM fallback), set `DEBUG_SCREENSHOTS=true`. Each bank saves:
 - `./data/debug/alfabank-statement-<account>.html` / `.png`
-- `./data/debug/priorbank-statement-<account>.html` / `.png`
+- `./data/debug/priorbank-stmt-<account>-response.json`
 - `./data/debug/belveb-statement-<account>.html` / `.png`
 - `./data/debug/paritetbank-stmt-<account>-response.json`
 - `./data/debug/iparitet-stmt-<account>-response.json`
