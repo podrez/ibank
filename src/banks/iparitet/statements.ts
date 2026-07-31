@@ -144,14 +144,21 @@ function parseOperation(op: RawOperation): ScrapedTransaction | null {
   const credit = amount > 0 ? abs : undefined;
   const debit = amount < 0 ? abs : undefined;
 
+  const operationId = op.operationId != null ? String(op.operationId).trim() : '';
+  const rrn = op.rrn ? String(op.rrn).trim() : '';
+
   return {
     transactionDate,
-    reference: op.operationId != null ? String(op.operationId) : (op.rrn || undefined),
+    reference: operationId || rrn || undefined,
     description: op.payName || '—',
     debit,
     credit,
     currency: normaliseCurrency(op.currency),
     counterpartyName: op.payName || undefined,
     operationCode: op.payCode != null ? String(op.payCode) : undefined,
+    // While a card operation is only authorised the bank publishes it without an
+    // operationId, so it gets stored under its RRN; the settled version carries
+    // the same RRN plus a permanent operationId. Retire the hold row.
+    supersedesKeys: operationId && rrn && rrn !== operationId ? [rrn] : undefined,
   };
 }

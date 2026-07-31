@@ -215,16 +215,69 @@ async function persistTransactions(
     txKey: computeTxKey(tx),
   }));
 
+  // Keys of provisional (authorisation-hold) records that the settled versions in
+  // this batch replace — see ScrapedTransaction.supersedesKeys.
+  const superseded = new Set<string>();
+  for (const tx of scraped) {
+    const own = computeTxKey(tx);
+    for (const key of tx.supersedesKeys ?? []) {
+      if (key && key !== own) superseded.add(key);
+    }
+  }
+
+  if (superseded.size > 0) {
+    const removed = await deleteSupersededTransactions(bankId, accountNumber, [...superseded]);
+    if (removed > 0) {
+      logger.info('Superseded hold transactions removed', {
+        bank: bankId, account: accountNumber, removed,
+      });
+    }
+  }
+
+  // A hold and its settled version can also arrive in the same response — keep the
+  // settled one only, otherwise the hold would be re-inserted right after the delete.
+  const toInsert = rows.filter((r) => !superseded.has(r.txKey));
+  if (toInsert.length === 0) return { imported: 0, skipped: scraped.length };
+
   // Single INSERT OR IGNORE — unique index on (bank, accountNumber, transactionDate, txKey)
   const inserted = await db
     .insert(schema.transactions)
-    .values(rows)
+    .values(toInsert)
     .onConflictDoNothing()
     .returning({ id: schema.transactions.id });
 
   const imported = inserted.length;
-  const skipped = rows.length - imported;
+  const skipped = scraped.length - imported;
   return { imported, skipped };
+}
+
+/**
+ * Drop rows stored under a provisional key that a settled record now replaces.
+ * Matched on (bank, account, txKey) only — the settlement date may differ from
+ * the authorisation date, so the transaction date is deliberately not part of it.
+ */
+async function deleteSupersededTransactions(
+  bankId: string,
+  accountNumber: string,
+  keys: string[],
+): Promise<number> {
+  let removed = 0;
+  // SQLite caps bound parameters per statement — delete in chunks.
+  for (let i = 0; i < keys.length; i += 200) {
+    const chunk = keys.slice(i, i + 200);
+    const deleted = await db
+      .delete(schema.transactions)
+      .where(
+        and(
+          eq(schema.transactions.bank, bankId),
+          eq(schema.transactions.accountNumber, accountNumber),
+          inArray(schema.transactions.txKey, chunk),
+        ),
+      )
+      .returning({ id: schema.transactions.id });
+    removed += deleted.length;
+  }
+  return removed;
 }
 
 /**

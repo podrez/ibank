@@ -158,6 +158,17 @@ a live login):
   Each op: `paymentDate` (ms), `amount` (sign = direction: −=debit/Списание,
   +=credit/Зачисление), `currency` (alphabetic), `payName`, `payCode`, `operationId`, `rrn`.
 
+A card operation is published **twice**: first as an authorisation hold, which has an
+`rrn` but no `operationId`, and then — once it settles — with the same `rrn` plus a
+permanent `operationId`. Since the dedup key is the reference, the two versions used
+to land as two rows with different document numbers. `parseOperation` therefore fills
+`supersedesKeys: [rrn]` on the settled record, and `persistTransactions`
+(`src/scraper/index.ts`) deletes the row stored under that key — matching on
+(bank, account, tx_key) only, because the settlement date can differ from the
+authorisation date. Rows already duplicated in the DB heal on the next sync that
+re-fetches the settled operation; for older ones run `POST /api/statements/refresh`
+with an explicit `dateFrom`/`dateTo`.
+
 The bank occasionally answers a `200` with a **non-JSON body**. `apiCall` treats that
 as a failure (with a body snippet in `error`) rather than "no accounts", and scrapers
 use `apiCallWithRetry` (one retry after 2 s) so a transient blip doesn't fail the cycle.
