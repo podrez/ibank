@@ -159,15 +159,26 @@ a live login):
   +=credit/Зачисление), `currency` (alphabetic), `payName`, `payCode`, `operationId`, `rrn`.
 
 A card operation is published **twice**: first as an authorisation hold, which has an
-`rrn` but no `operationId`, and then — once it settles — with the same `rrn` plus a
-permanent `operationId`. Since the dedup key is the reference, the two versions used
-to land as two rows with different document numbers. `parseOperation` therefore fills
-`supersedesKeys: [rrn]` on the settled record, and `persistTransactions`
-(`src/scraper/index.ts`) deletes the row stored under that key — matching on
-(bank, account, tx_key) only, because the settlement date can differ from the
-authorisation date. Rows already duplicated in the DB heal on the next sync that
-re-fetches the settled operation; for older ones run `POST /api/statements/refresh`
-with an explicit `dateFrom`/`dateTo`.
+`rrn` but no `operationId`, and then — once the bank posts it — with the same `rrn`
+plus a permanent `operationId`. The bank's own statement lists **only** the posted
+version, so `scrapeStatement` skips everything `isSettled()` rejects (no
+`operationId`). Storing holds produced a second row for the same payment keyed by
+the 12-digit `rrn` next to the 9-digit document id — do not reinstate it.
+`operationStatus` is deliberately *not* part of the test (its full set of values is
+unknown, and gating on a guessed one would drop real transactions); skipped
+operations are logged with their status, so calibrate from those logs before
+changing the rule. Migration `0010_drop_iparitet_pending` deletes the hold rows the
+earlier behaviour left behind.
+
+Because a payment is stored only once the bank posts it — possibly days after its
+transaction date — `resolveFromDate` (`src/scraper/index.ts`) starts a sync no later
+than `LOOKBACK_DAYS` (7) ago even when newer transactions are already stored.
+Otherwise a late-posted operation would fall outside the window for good.
+
+Note on migrations: `_journal.json` entry `0009_add_settings` carries a hand-set
+`when` in the future, and the migrator applies a file only if its `when` is greater
+than the last applied one — a newly generated migration needs its `when` bumped past
+it, or it is silently skipped.
 
 The bank occasionally answers a `200` with a **non-JSON body**. `apiCall` treats that
 as a failure (with a body snippet in `error`) rather than "no accounts", and scrapers

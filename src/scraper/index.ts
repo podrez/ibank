@@ -215,69 +215,16 @@ async function persistTransactions(
     txKey: computeTxKey(tx),
   }));
 
-  // Keys of provisional (authorisation-hold) records that the settled versions in
-  // this batch replace — see ScrapedTransaction.supersedesKeys.
-  const superseded = new Set<string>();
-  for (const tx of scraped) {
-    const own = computeTxKey(tx);
-    for (const key of tx.supersedesKeys ?? []) {
-      if (key && key !== own) superseded.add(key);
-    }
-  }
-
-  if (superseded.size > 0) {
-    const removed = await deleteSupersededTransactions(bankId, accountNumber, [...superseded]);
-    if (removed > 0) {
-      logger.info('Superseded hold transactions removed', {
-        bank: bankId, account: accountNumber, removed,
-      });
-    }
-  }
-
-  // A hold and its settled version can also arrive in the same response — keep the
-  // settled one only, otherwise the hold would be re-inserted right after the delete.
-  const toInsert = rows.filter((r) => !superseded.has(r.txKey));
-  if (toInsert.length === 0) return { imported: 0, skipped: scraped.length };
-
   // Single INSERT OR IGNORE — unique index on (bank, accountNumber, transactionDate, txKey)
   const inserted = await db
     .insert(schema.transactions)
-    .values(toInsert)
+    .values(rows)
     .onConflictDoNothing()
     .returning({ id: schema.transactions.id });
 
   const imported = inserted.length;
-  const skipped = scraped.length - imported;
+  const skipped = rows.length - imported;
   return { imported, skipped };
-}
-
-/**
- * Drop rows stored under a provisional key that a settled record now replaces.
- * Matched on (bank, account, txKey) only — the settlement date may differ from
- * the authorisation date, so the transaction date is deliberately not part of it.
- */
-async function deleteSupersededTransactions(
-  bankId: string,
-  accountNumber: string,
-  keys: string[],
-): Promise<number> {
-  let removed = 0;
-  // SQLite caps bound parameters per statement — delete in chunks.
-  for (let i = 0; i < keys.length; i += 200) {
-    const chunk = keys.slice(i, i + 200);
-    const deleted = await db
-      .delete(schema.transactions)
-      .where(
-        and(
-          eq(schema.transactions.bank, bankId),
-          eq(schema.transactions.accountNumber, accountNumber),
-          inArray(schema.transactions.txKey, chunk),
-        ),
-      )
-      .returning({ id: schema.transactions.id });
-    removed += deleted.length;
-  }
-  return removed;
 }
 
 /**
@@ -301,12 +248,25 @@ function getStatementAccounts(bankId: string): string[] {
 }
 
 
+/** How far back a statement sync always looks, on top of the stored history. */
+const LOOKBACK_DAYS = 7;
+
 /**
- * Determine the start date for a statement sync when no explicit date is given.
- * Uses the most recent transaction date already in the DB for this account.
- * Falls back to 7 days ago if no transactions exist yet.
+ * Determine the start date for a statement sync when no explicit date is given:
+ * the most recent transaction date already stored for this account, but never
+ * later than LOOKBACK_DAYS ago (7 days ago too when there is no history yet).
+ *
+ * The overlap matters because a bank can post an operation days after it was
+ * made, dated when it was made — iParitet only publishes a card payment as a
+ * real transaction once it settles. Starting strictly at the newest stored date
+ * would skip such an operation for good. Re-fetched rows are deduplicated on
+ * insert, so the overlap costs nothing.
  */
 async function resolveFromDate(bankId: string, accountNumber: string): Promise<string> {
+  const d = new Date();
+  d.setDate(d.getDate() - LOOKBACK_DAYS);
+  const lookback = d.toISOString().slice(0, 10);
+
   const last = await db.query.transactions.findFirst({
     where: and(
       eq(schema.transactions.bank, bankId),
@@ -316,19 +276,16 @@ async function resolveFromDate(bankId: string, accountNumber: string): Promise<s
     columns: { transactionDate: true },
   });
 
-  if (last) {
-    logger.debug('resolveFromDate: last transaction found', {
-      bank: bankId, accountNumber, lastDate: last.transactionDate,
-    });
-    return last.transactionDate;
+  if (!last) {
+    logger.debug('resolveFromDate: no history, falling back', { bank: bankId, accountNumber, fallback: lookback });
+    return lookback;
   }
 
-  // No history — load last 7 days
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  const fallback = d.toISOString().slice(0, 10);
-  logger.debug('resolveFromDate: no history, falling back', { bank: bankId, accountNumber, fallback });
-  return fallback;
+  const from = last.transactionDate < lookback ? last.transactionDate : lookback;
+  logger.debug('resolveFromDate: last transaction found', {
+    bank: bankId, accountNumber, lastDate: last.transactionDate, from,
+  });
+  return from;
 }
 
 // ── Session-expiry / browser-stuck detection ──────────────────────────────────

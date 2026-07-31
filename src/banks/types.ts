@@ -26,15 +26,6 @@ export interface ScrapedTransaction {
   counterpartyAccount?: string;
   /** Bank operation/transaction type code */
   operationCode?: string;
-  /**
-   * Dedup keys of earlier, provisional records this transaction replaces.
-   *
-   * Some banks publish a card operation twice: first as an authorisation hold
-   * identified only by its RRN, then — once it settles — under a permanent
-   * document id. Listing the hold's identifier here makes the persistence layer
-   * drop that row instead of keeping both.
-   */
-  supersedesKeys?: string[];
 }
 
 export interface StatementRequest {

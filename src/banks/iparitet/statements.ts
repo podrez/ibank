@@ -29,6 +29,7 @@ interface RawOperation {
   payCode?: string | number;
   operationId?: string | number;
   operationType?: string;
+  operationStatus?: string;
   rrn?: string;
   authCode?: string;
   contractNumber?: string;
@@ -87,7 +88,19 @@ export async function scrapeStatement(
     return [];
   }
 
-  const transactions = operations
+  const settled = operations.filter(isSettled);
+  const pending = operations.length - settled.length;
+  if (pending > 0) {
+    logger.info('[iparitet:stmt] Pending (authorisation-only) operations skipped', {
+      account: req.accountNumber,
+      pending,
+      samples: operations.filter((op) => !isSettled(op)).slice(0, 5).map((op) => ({
+        payName: op.payName, amount: op.amount, rrn: op.rrn, status: op.operationStatus,
+      })),
+    });
+  }
+
+  const transactions = settled
     .map(parseOperation)
     .filter((t): t is ScrapedTransaction => t !== null);
   logger.info('[iparitet:stmt] Transactions extracted', { count: transactions.length });
@@ -135,6 +148,20 @@ async function resolveContractHash(
   return found.contractNumberHash;
 }
 
+/**
+ * Has the bank actually posted this operation?
+ *
+ * A card payment first appears as an authorisation hold: it carries an `rrn` but
+ * no `operationId`, and the bank's own statement does not list it at all. Once
+ * posted, the same operation comes back with a permanent `operationId` (the
+ * `rrn` stays). Storing the hold produced a second row for the same payment
+ * under a different document number, so pending operations are skipped entirely
+ * — they land in the DB when the bank posts them.
+ */
+function isSettled(op: RawOperation): boolean {
+  return String(op.operationId ?? '').trim().length > 0;
+}
+
 function parseOperation(op: RawOperation): ScrapedTransaction | null {
   const transactionDate = parseDate(String(op.paymentDate ?? ''));
   if (!transactionDate) return null;
@@ -144,21 +171,15 @@ function parseOperation(op: RawOperation): ScrapedTransaction | null {
   const credit = amount > 0 ? abs : undefined;
   const debit = amount < 0 ? abs : undefined;
 
-  const operationId = op.operationId != null ? String(op.operationId).trim() : '';
-  const rrn = op.rrn ? String(op.rrn).trim() : '';
-
   return {
     transactionDate,
-    reference: operationId || rrn || undefined,
+    // Only settled operations reach this point, so operationId is always present.
+    reference: String(op.operationId).trim(),
     description: op.payName || '—',
     debit,
     credit,
     currency: normaliseCurrency(op.currency),
     counterpartyName: op.payName || undefined,
     operationCode: op.payCode != null ? String(op.payCode) : undefined,
-    // While a card operation is only authorised the bank publishes it without an
-    // operationId, so it gets stored under its RRN; the settled version carries
-    // the same RRN plus a permanent operationId. Retire the hold row.
-    supersedesKeys: operationId && rrn && rrn !== operationId ? [rrn] : undefined,
   };
 }
