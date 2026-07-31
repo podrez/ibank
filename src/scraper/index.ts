@@ -2,8 +2,8 @@ import { getEnabledBanks, BankAdapter, ScrapedAccount, ScrapedTransaction, State
 import { db, schema } from '../db';
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { logger } from '../logger';
-import crypto from 'crypto';
 import { notifyStatementChanged } from '../notify/onec';
+import { computeTxKey } from '../utils/txkey';
 import { isoToday } from '../utils/dates';
 import { getConfig } from '../config/store';
 
@@ -225,16 +225,6 @@ async function persistTransactions(
   const imported = inserted.length;
   const skipped = rows.length - imported;
   return { imported, skipped };
-}
-
-/**
- * Compute a stable deduplication key for a transaction.
- * Uses reference when available; falls back to a hash of (description, debit, credit).
- */
-function computeTxKey(tx: ScrapedTransaction): string {
-  if (tx.reference) return tx.reference;
-  const raw = [tx.description, tx.debit ?? '', tx.credit ?? ''].join('|');
-  return crypto.createHash('md5').update(raw).digest('hex').slice(0, 16);
 }
 
 /**

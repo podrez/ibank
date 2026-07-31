@@ -39,7 +39,9 @@ export const syncLog = sqliteTable('sync_log', {
 /**
  * Bank statement transactions.
  * Deduplication key: (bank, account_number, transaction_date, tx_key)
- * where tx_key = reference document number, or hash(description|debit|credit) when absent.
+ * where tx_key is built by computeTxKey() in src/utils/txkey.ts from the
+ * document number, the amounts, the counterparty account and the purpose —
+ * the document number alone repeats within a day.
  */
 export const transactions = sqliteTable(
   'transactions',
@@ -66,10 +68,7 @@ export const transactions = sqliteTable(
     counterpartyAccount: text('counterparty_account'),
     /** Bank operation/transaction type code */
     operationCode: text('operation_code'),
-    /**
-     * Deterministic dedup key: reference when available,
-     * otherwise a stable string derived from date+description+amounts.
-     */
+    /** Deterministic dedup key — see computeTxKey() in src/utils/txkey.ts */
     txKey: text('tx_key').notNull(),
     importedAt: text('imported_at').notNull().default(sql`(datetime('now'))`),
   },

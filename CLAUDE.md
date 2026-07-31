@@ -53,6 +53,31 @@ Scheduler (node-cron)
 | `src/scheduler/index.ts` | Cron every INTERVAL min; retail (`roundTheClock`) banks 24/7, corporate banks Mon–Fri START–END hour; guards concurrent syncs |
 | `src/api/routes.ts` | Express routes with `X-Api-Key` / `Authorization: Bearer` auth |
 | `src/db/schema.ts` | Tables: `accounts`, `sync_log`, `transactions` |
+| `src/utils/txkey.ts` | `computeTxKey()` — deduplication key for stored transactions |
+
+### Transaction deduplication
+
+A statement sync always re-reads the last `LOOKBACK_DAYS` (7) days, so rows are
+inserted with `onConflictDoNothing()` against the unique index
+`(bank, account_number, transaction_date, tx_key)`.
+
+**The document number is not a transaction identity.** BelVEB (02.06.2026) listed
+two payments to the same counterparty numbered the same, differing in amount and
+purpose; keying on the reference alone dropped the second one — silently, since a
+collision only raises the `skipped` count that a re-scrape produces anyway.
+`computeTxKey()` (`src/utils/txkey.ts`) therefore hashes the document number
+**together with** the amounts, the counterparty account and the payment purpose,
+and keeps the number as a readable prefix (`1:8bc8eda68edf3f29`).
+
+Everything in the key must survive a re-scrape byte-identically, or the overlap
+window fabricates duplicates: amounts are compared in whole cents and text has its
+whitespace collapsed. Do not add fields the bank re-renders (running balances,
+formatted dates, status labels).
+
+**Changing the formula requires bumping `TX_KEY_VERSION`.** `rebuildTxKeys()` in
+`src/db/index.ts` runs after the drizzle migrations, recomputes every stored key
+from its columns and records the version in `settings._txKeyVersion`. Without it,
+the lookback window would re-insert recent rows under their new keys.
 
 ### Adding a new bank
 
