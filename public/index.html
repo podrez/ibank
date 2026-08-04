@@ -611,15 +611,61 @@
     .seg button.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
     html[data-theme="dark"] .seg button.is-active { background: var(--line); }
 
+    .stmt-toolbar {
+      display: flex; align-items: center; gap: 0.7rem;
+      margin-bottom: 0.85rem;
+    }
+    /* Takes the slack in the toolbar, down to a still-typable 9rem. */
+    .stmt-toolbar .stmt-search { flex: 1 1 9rem; min-width: 0; max-width: 22rem; }
+    .stmt-search { position: relative; display: inline-flex; align-items: center; }
+    .stmt-search-ico {
+      position: absolute; left: 0.6rem; width: 15px; height: 15px;
+      color: var(--muted); pointer-events: none;
+    }
+    .stmt-search input {
+      width: 100%;
+      padding: 0.45rem 1.9rem 0.45rem 1.95rem;
+      border: 1.5px solid var(--line);
+      border-radius: 7px;
+      font-size: 0.84rem;
+      font-family: var(--sans);
+      outline: none;
+      background: var(--surface-2);
+      color: var(--ink);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .stmt-search input::placeholder { color: var(--muted); }
+    .stmt-search input::-webkit-search-cancel-button { display: none; }
+    .stmt-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+    .stmt-search-clear {
+      position: absolute; right: 0.4rem;
+      display: flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; padding: 0;
+      border: none; background: transparent; cursor: pointer;
+      color: var(--muted); border-radius: 4px;
+    }
+    /* `display: flex` above would otherwise beat the UA stylesheet's [hidden]. */
+    .stmt-search-clear[hidden] { display: none; }
+    .stmt-search-clear:hover { color: var(--ink); background: var(--line); }
+    .stmt-search-clear svg { width: 13px; height: 13px; }
+
+    .stmt-table mark {
+      background: var(--accent-wash);
+      color: inherit;
+      border-radius: 3px;
+      padding: 0 1px;
+    }
+
     .stmt-controls .spacer { flex: 1; }
 
     .stmt-body { padding: 1.1rem 1.6rem 1.6rem; }
     #stmt-status {
       font-size: 0.82rem; color: var(--muted);
-      margin-bottom: 0.85rem; min-height: 1.1rem;
-      display: flex; align-items: center; gap: 0.5rem;
+      min-height: 1.1rem; text-align: right;
+      margin-left: auto; flex: 0 1 auto;
     }
     #stmt-status.is-error { color: var(--neg); }
+    .stmt-toolbar .seg { flex: none; }
 
     .stmt-table-wrap {
       border: 1px solid var(--line);
@@ -703,10 +749,14 @@
       .stmt-head, .stmt-controls { padding-left: 1.1rem; padding-right: 1.1rem; }
       .stmt-body { padding: 1rem 1.1rem 2rem; }
       .stmt-controls { gap: 0.55rem 0.6rem; }
-      .stmt-controls .seg { order: 3; width: 100%; }
-      .stmt-controls .seg button { flex: 1; }
       .stmt-controls .spacer { display: none; }
-      #stmt-refresh-btn { order: 4; width: 100%; }
+      #stmt-refresh-btn { order: 3; width: 100%; }
+
+      .stmt-toolbar { flex-wrap: wrap; gap: 0.55rem 0.6rem; }
+      .stmt-toolbar .seg { order: 2; width: 100%; }
+      .stmt-toolbar .seg button { flex: 1; }
+      .stmt-toolbar .stmt-search { order: 1; flex-basis: 100%; max-width: none; }
+      .stmt-toolbar #stmt-status { order: 3; width: 100%; margin-left: 0; text-align: left; }
 
       .stmt-table-wrap { border: none; border-radius: 0; }
       .stmt-table thead, .stmt-table colgroup { display: none; }
@@ -1039,11 +1089,6 @@
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="5.5"/><path d="M13.3 13.3L17 17"/></svg>
         </button>
       </div>
-      <div class="seg">
-        <button class="is-active" data-dir="all"    onclick="setStmtDir(this)">Все</button>
-        <button data-dir="credit" onclick="setStmtDir(this)">Приход</button>
-        <button data-dir="debit"  onclick="setStmtDir(this)">Расход</button>
-      </div>
       <div class="spacer"></div>
       <button class="btn btn-ghost" id="stmt-refresh-btn" onclick="refreshStatement()">
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 9a6 6 0 10-1.8 4.3M16 14v-4h-4"/></svg>
@@ -1051,7 +1096,26 @@
       </button>
     </div>
     <div class="stmt-body">
-      <div id="stmt-status"></div>
+      <!-- Filters the already-loaded rows — hence next to the table, not in the
+           period panel above, which is what goes to the bank. -->
+      <div class="stmt-toolbar">
+        <div class="seg">
+          <button class="is-active" data-dir="all"    onclick="setStmtDir(this)">Все</button>
+          <button data-dir="credit" onclick="setStmtDir(this)">Приход</button>
+          <button data-dir="debit"  onclick="setStmtDir(this)">Расход</button>
+        </div>
+        <div class="stmt-search">
+          <svg class="stmt-search-ico" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="5.5"/><path d="M13.3 13.3L17 17"/></svg>
+          <input type="search" id="stmt-search" placeholder="Контрагент или УНП"
+                 autocomplete="off" spellcheck="false" aria-label="Поиск по контрагенту или УНП"
+                 oninput="setStmtQuery()" />
+          <button type="button" class="stmt-search-clear" id="stmt-search-clear" hidden
+                  onclick="clearStmtQuery()" title="Очистить" aria-label="Очистить поиск">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>
+          </button>
+        </div>
+        <div id="stmt-status"></div>
+      </div>
       <div id="stmt-content"></div>
     </div>
   </div>
@@ -1768,6 +1832,8 @@
     document.getElementById('stmt-from').value = firstDayOfMonthStr();
     document.getElementById('stmt-to').value = todayStr();
     document.querySelectorAll('.seg button').forEach((t, i) => t.classList.toggle('is-active', i === 0));
+    document.getElementById('stmt-search').value = '';
+    document.getElementById('stmt-search-clear').hidden = true;
     document.getElementById('stmt-status').textContent = '';
     document.getElementById('stmt-status').className = '';
     document.getElementById('stmt-content').innerHTML = '';
@@ -1785,6 +1851,8 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (document.getElementById('cfg-overlay').classList.contains('is-open')) closeSettings();
+      // Esc in a non-empty search box clears the filter before it closes the modal.
+      else if (document.activeElement?.id === 'stmt-search' && stmtQuery() !== '') clearStmtQuery();
       else closeStatement();
     }
   });
@@ -1839,18 +1907,55 @@
     renderStmtTable(lastTxs);
   }
 
+  function setStmtQuery() {
+    const q = document.getElementById('stmt-search').value;
+    document.getElementById('stmt-search-clear').hidden = q === '';
+    renderStmtTable(lastTxs);
+  }
+  function clearStmtQuery() {
+    document.getElementById('stmt-search').value = '';
+    document.getElementById('stmt-search-clear').hidden = true;
+    document.getElementById('stmt-search').focus();
+    renderStmtTable(lastTxs);
+  }
+  function stmtQuery() {
+    return (document.getElementById('stmt-search')?.value ?? '').trim().toLowerCase();
+  }
+  function matchesStmtQuery(t, q) {
+    if (!q) return true;
+    if ((t.counterpartyName || '').toLowerCase().includes(q)) return true;
+    const unp = t.counterpartyUnp || '';
+    if (unp.toLowerCase().includes(q)) return true;
+    // "УНП 190845712", "190 845 712" — the УНП is compared digits-only.
+    const digits = q.replace(/\D/g, '');
+    return digits !== '' && unp.replace(/\D/g, '').includes(digits);
+  }
+  /** esc() with every occurrence of the search term wrapped in <mark>. */
+  function escHighlight(text, q) {
+    const s = String(text ?? '');
+    if (!q) return esc(s);
+    const hay = s.toLowerCase();
+    let out = '', pos = 0, i;
+    while ((i = hay.indexOf(q, pos)) !== -1) {
+      out += esc(s.slice(pos, i)) + '<mark>' + esc(s.slice(i, i + q.length)) + '</mark>';
+      pos = i + q.length;
+    }
+    return out + esc(s.slice(pos));
+  }
+
   function renderStmtTable(txs) {
     const el = document.getElementById('stmt-content');
     const direction = document.querySelector('.seg button.is-active')?.dataset.dir ?? 'all';
-    const filtered = direction === 'debit'  ? txs.filter(t => t.debit  != null)
-                   : direction === 'credit' ? txs.filter(t => t.credit != null)
-                   : txs;
+    const q = stmtQuery();
+    const filtered = txs.filter(t =>
+      (direction === 'debit'  ? t.debit  != null :
+       direction === 'credit' ? t.credit != null : true) && matchesStmtQuery(t, q));
 
     if (!filtered.length) {
       el.innerHTML = txs.length
         ? '<div class="stmt-empty">Нет операций, соответствующих фильтру.</div>'
         : '<div class="stmt-empty">Транзакций за выбранный период не найдено.</div>';
-      setStmtStatus(txs.length ? `Всего: ${txs.length} · показано: 0` : 'Операций нет');
+      setStmtStatus(txs.length ? `найдено 0 из ${txs.length}` : 'Операций нет');
       return;
     }
 
@@ -1858,8 +1963,8 @@
     for (const t of filtered) { totCredit += (t.credit || 0); totDebit += (t.debit || 0); }
 
     const rows = filtered.map(t => {
-      const cpName = t.counterpartyName ? `<div class="st-cp-name">${esc(t.counterpartyName)}</div>` : '';
-      const cpUnp  = t.counterpartyUnp ? `<div class="st-unp">УНП ${esc(t.counterpartyUnp)}</div>` : '';
+      const cpName = t.counterpartyName ? `<div class="st-cp-name">${escHighlight(t.counterpartyName, q)}</div>` : '';
+      const cpUnp  = t.counterpartyUnp ? `<div class="st-unp">УНП ${escHighlight(t.counterpartyUnp, q)}</div>` : '';
       const cpCell = (cpName || cpUnp) ? cpName + cpUnp : '—';
       return `
       <tr>
@@ -1888,13 +1993,15 @@
         </table>
       </div>
       <div class="stmt-foot">
-        <span>Показано операций: <b>${filtered.length}</b></span>
+        <span>Итого по <b>${filtered.length}</b> ${plural(filtered.length, 'операции', 'операциям', 'операциям')}</span>
         <span class="stmt-totals">
           <span class="pos">Приход: <b>+${fmtBalance(totCredit)}</b></span>
           <span class="neg">Расход: <b>−${fmtBalance(totDebit)}</b></span>
         </span>
       </div>`;
-    setStmtStatus(`Период загружен · всего операций: ${txs.length}`);
+    setStmtStatus(filtered.length !== txs.length
+      ? `найдено ${filtered.length} из ${txs.length}`
+      : `всего операций: ${txs.length}`);
   }
 
   function setStmtStatus(msg, isError = false) {
