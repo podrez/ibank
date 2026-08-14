@@ -25,6 +25,11 @@
       --pos-wash:  #e9f6ed;
       --neg:       #c81e1e;
       --neg-wash:  #fcebeb;
+      /* entity tags (юр/физ лицо) */
+      --tag-legal-wash: #eef3ff;
+      --tag-legal-ink:  #1d4ed8;
+      --tag-pers-wash:  #f2eefd;
+      --tag-pers-ink:   #6d3ed6;
       --shadow:    0 1px 2px rgba(16,20,28,.04), 0 8px 24px -12px rgba(16,20,28,.10);
       --shadow-lg: 0 24px 60px -20px rgba(16,20,28,.28);
       --radius:    14px;
@@ -50,6 +55,10 @@
       --pos-wash:  #16311f;
       --neg:       #f2706f;
       --neg-wash:  #341a1c;
+      --tag-legal-wash: #1d2c46;
+      --tag-legal-ink:  #7aa8ff;
+      --tag-pers-wash:  #2b2450;
+      --tag-pers-ink:   #b49bff;
       --shadow:    0 1px 2px rgba(0,0,0,.22), 0 12px 30px -16px rgba(0,0,0,.42);
       --shadow-lg: 0 28px 64px -22px rgba(0,0,0,.55);
     }
@@ -332,11 +341,87 @@
     .sum-meta-inline .mi-mono b { font-family: var(--mono); font-size: 0.92em; }
 
     /* ── Account grid ───────────────────────────────── */
-    #accounts-grid {
+    /* The page-level container stacks the groups; the cards themselves are laid
+       out by .group-grid inside each group (one group when grouping is off). */
+    #accounts-grid { display: flex; flex-direction: column; gap: 1.85rem; }
+    .group-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
       gap: 1.1rem;
     }
+
+    /* ── Account groups ─────────────────────────────── */
+    .group-head {
+      display: flex; align-items: center;
+      gap: 0.6rem;
+      padding: 0 0.15rem 0.6rem;
+      margin-bottom: 1.05rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .group-title {
+      font-family: var(--mono);
+      font-size: 0.7rem; font-weight: 600;
+      letter-spacing: 0.13em; text-transform: uppercase;
+      color: var(--ink-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .entity-pill {
+      font-family: var(--mono);
+      font-size: 0.625rem; font-weight: 700; letter-spacing: 0.1em;
+      padding: 0.22rem 0.4rem;
+      border-radius: 5px;
+      flex-shrink: 0;
+    }
+    .entity-pill.is-legal    { background: var(--tag-legal-wash); color: var(--tag-legal-ink); }
+    .entity-pill.is-personal { background: var(--tag-pers-wash);  color: var(--tag-pers-ink); }
+    .group-count { font-size: 0.76rem; color: var(--faint); white-space: nowrap; }
+    .group-totals {
+      margin-left: auto;
+      display: flex; align-items: baseline; gap: 0.15rem 0.9rem; flex-wrap: wrap;
+      justify-content: flex-end;
+      font-size: 0.86rem; font-weight: 600; color: var(--ink-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .group-totals .gt-cur { font-weight: 550; font-size: 0.86em; color: var(--muted); margin-left: 0.22rem; }
+
+    /* ── Grouping controls ──────────────────────────── */
+    .section-head.is-accounts { align-items: center; flex-wrap: wrap; gap: 0.6rem 1rem; }
+    .group-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    #group-mode-seg { flex-wrap: wrap; }
+    .order-reset { display: none; }
+    body.edit-mode .order-reset {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.78rem; font-weight: 600;
+      color: var(--muted); background: transparent;
+      border: none; cursor: pointer; padding: 0.2rem 0.1rem;
+      font-family: var(--sans);
+    }
+    body.edit-mode .order-reset:hover { color: var(--ink); }
+    .order-reset svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* ── Reordering (edit mode only) ────────────────── */
+    .sort-ctrls { display: none; }
+    body.edit-mode .sort-ctrls {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      flex-shrink: 0;
+    }
+    .grip { display: grid; place-items: center; color: var(--faint); cursor: grab; }
+    .grip svg { width: 13px; height: 13px; }
+    .sort-btn {
+      width: 22px; height: 22px; padding: 0;
+      border: 1px solid var(--line); border-radius: 6px;
+      background: transparent; color: var(--muted);
+      display: grid; place-items: center; cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .sort-btn svg { width: 11px; height: 11px; }
+    .sort-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--muted); }
+    .sort-btn:disabled { opacity: .3; cursor: default; }
+    body.edit-mode .card[draggable="true"],
+    body.edit-mode .group-head[draggable="true"] { cursor: grab; }
+    .is-dragging { opacity: .45; }
+    .card.is-dragging { outline: 2px dashed var(--accent); outline-offset: -2px; }
+    .acct-group.is-dragging .group-head { border-color: var(--accent); }
 
     .card {
       position: relative;
@@ -391,6 +476,7 @@
       font-size: 0.86rem; font-weight: 600; letter-spacing: -0.01em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .card-side { display: inline-flex; align-items: center; gap: 0.45rem; flex-shrink: 0; }
     .cur-tag {
       font-family: var(--mono);
       font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em;
@@ -598,6 +684,8 @@
       padding: 3px;
       gap: 2px;
     }
+    /* `display: inline-flex` above would otherwise beat the UA stylesheet's [hidden]. */
+    .seg[hidden] { display: none; }
     .seg button {
       padding: 0.35rem 0.75rem;
       font-size: 0.8rem; font-weight: 550;
@@ -734,7 +822,9 @@
       .topbar-sub, .topbar-sep { display: none; }
       .countdown { display: none !important; }
       .status-pill .status-txt { display: none; }
-      #accounts-grid { grid-template-columns: 1fr; }
+      .group-grid { grid-template-columns: 1fr; }
+      .group-head { flex-wrap: wrap; }
+      .group-totals { margin-left: 0; flex-basis: 100%; justify-content: flex-start; }
       .stmt-table col.col-ref, .stmt-table .col-ref-cell { display: none; }
     }
     @media (max-width: 520px) {
@@ -1362,7 +1452,7 @@
   <main>
     <div class="edit-banner">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6.5v4M10 13.5h.01"/></svg>
-      <span>Режим настройки: управляйте видимостью счетов и включайте авто-загрузку выписок. <b id="hidden-count-hint"></b></span>
+      <span>Режим настройки: управляйте видимостью счетов, включайте авто-загрузку выписок и меняйте порядок — перетаскиванием или стрелками. <b id="hidden-count-hint"></b></span>
     </div>
 
     <section id="summary-section" style="display:none">
@@ -1374,8 +1464,21 @@
     </section>
 
     <section>
-      <div class="section-head">
+      <div class="section-head is-accounts">
         <h2 id="accounts-title">Счета</h2>
+        <div class="group-controls">
+          <button class="order-reset" onclick="resetLayout()" title="Вернуть порядок групп и счетов по умолчанию">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 109.4-3.9M12.5 1.8v3h-3"/></svg>
+            Сбросить порядок
+          </button>
+          <div class="seg" id="group-mode-seg">
+            <button data-mode="type-currency" onclick="setGroupMode('type-currency')">Тип · валюта</button>
+            <button data-mode="type"          onclick="setGroupMode('type')">Тип</button>
+            <button data-mode="currency"      onclick="setGroupMode('currency')">Валюта</button>
+            <button data-mode="bank"          onclick="setGroupMode('bank')">Банк</button>
+            <button data-mode="none"          onclick="setGroupMode('none')">Без групп</button>
+          </div>
+        </div>
       </div>
       <div id="accounts-grid"></div>
     </section>
@@ -1387,15 +1490,24 @@
   const BASE = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
 
   // ── bank metadata ────────────────────────────────
+  // `entity` drives the юр/физ grouping: every corporate cabinet is 'legal',
+  // iParitet is the retail (физлица) one.
   const BANKS = {
-    alfabank:    { code: 'ALFA', label: 'Альфа-Банк',  color: '#ef3124', wash: '#fdeceb', ink: '#bf1e0e', fav: 'https://online.alfabank.by/favicon.ico' },
-    priorbank:   { code: 'PRIO', label: 'Приорбанк',   color: '#ffd100', wash: '#fff7d6', ink: '#7a5500', fav: 'https://www.priorbank.by/favicon.ico' },
-    belveb:      { code: 'BVEB', label: 'БелВЭБ',       color: '#007a8a', wash: '#e1f4f6', ink: '#005a6e', fav: 'https://dbo2.bveb.by/favicon.ico' },
-    paritetbank: { code: 'PRTB', label: 'Паритетбанк', color: '#23358c', wash: '#ecedfb', ink: '#23358c', fav: 'https://eparitet.by/favicons/favicon-32x32.png' },
-    iparitet:    { code: 'IPRT', label: 'Паритетбанк (физлица)', color: '#3752db', wash: '#ebeeff', ink: '#212ac4', fav: 'https://iparitet.by/assets/icons/favicon-32x32.png' },
-    unknown:     { code: 'BANK', label: 'Банк',        color: '#6a7180', wash: '#eef0f3', ink: '#374151', fav: '' },
+    alfabank:    { code: 'ALFA', label: 'Альфа-Банк',  color: '#ef3124', wash: '#fdeceb', ink: '#bf1e0e', entity: 'legal',    fav: 'https://online.alfabank.by/favicon.ico' },
+    priorbank:   { code: 'PRIO', label: 'Приорбанк',   color: '#ffd100', wash: '#fff7d6', ink: '#7a5500', entity: 'legal',    fav: 'https://www.priorbank.by/favicon.ico' },
+    belveb:      { code: 'BVEB', label: 'БелВЭБ',       color: '#007a8a', wash: '#e1f4f6', ink: '#005a6e', entity: 'legal',    fav: 'https://dbo2.bveb.by/favicon.ico' },
+    paritetbank: { code: 'PRTB', label: 'Паритетбанк', color: '#23358c', wash: '#ecedfb', ink: '#23358c', entity: 'legal',    fav: 'https://eparitet.by/favicons/favicon-32x32.png' },
+    iparitet:    { code: 'IPRT', label: 'Паритетбанк (физлица)', color: '#3752db', wash: '#ebeeff', ink: '#212ac4', entity: 'personal', fav: 'https://iparitet.by/assets/icons/favicon-32x32.png' },
+    unknown:     { code: 'BANK', label: 'Банк',        color: '#6a7180', wash: '#eef0f3', ink: '#374151', entity: 'legal',    fav: '' },
   };
   function bankMeta(b) { return BANKS[b] || BANKS.unknown; }
+
+  const ENTITIES = {
+    legal:    { pill: 'ЮР',  label: 'Юридические лица', rank: 0 },
+    personal: { pill: 'ФИЗ', label: 'Физические лица',  rank: 1 },
+  };
+  function entityOf(a) { return bankMeta(a.bank).entity || 'legal'; }
+  function entityMeta(e) { return ENTITIES[e] || ENTITIES.legal; }
 
   let apiKey = sessionStorage.getItem('apiKey') || '';
   let countdownTimer = null;
@@ -1405,6 +1517,29 @@
   let isEditMode = false;
   let hiddenAccounts = new Set(JSON.parse(localStorage.getItem('hiddenAccounts') || '[]'));
   let lastAccounts = [];
+
+  // ── Grouping / manual order (persisted per browser, like hiddenAccounts) ──
+  const GROUP_MODES = ['type-currency', 'type', 'currency', 'bank', 'none'];
+  let groupMode = localStorage.getItem('groupMode');
+  if (!GROUP_MODES.includes(groupMode)) groupMode = 'type-currency';
+  /** { [mode]: groupKey[] } — a manual order per grouping mode. */
+  let groupOrder = readJson('groupOrder', {});
+  /** Flat list of `${bank}:${accountNumber}` — relative order inside a group. */
+  let accountOrder = readJson('accountOrder', []);
+  /** Non-null while a card/group is being dragged — also blocks re-renders. */
+  let dragCtx = null;
+
+  const CHEV_UP   = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>`;
+  const CHEV_DOWN = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>`;
+  const GRIP      = `<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1.3"/><circle cx="10" cy="4" r="1.3"/><circle cx="6" cy="8" r="1.3"/><circle cx="10" cy="8" r="1.3"/><circle cx="6" cy="12" r="1.3"/><circle cx="10" cy="12" r="1.3"/></svg>`;
+
+  function readJson(key, fallback) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+      return parsed ?? fallback;
+    } catch { return fallback; }
+  }
+
   let statementAccountKeys = new Set();
   let todayTotals = {};
 
@@ -1633,7 +1768,7 @@
   // ── Render: skeletons ────────────────────────────
   function renderSkeletons(n) {
     const grid = document.getElementById('accounts-grid');
-    grid.innerHTML = Array.from({ length: n }, () => `
+    grid.innerHTML = `<div class="group-grid">` + Array.from({ length: n }, () => `
       <div class="card">
         <div class="card-top"><div class="skel sk-chip"></div></div>
         <div class="skel sk-line" style="width:55%;margin-bottom:.5rem"></div>
@@ -1641,7 +1776,7 @@
         <div class="skel sk-amt" style="margin-bottom:.8rem"></div>
         <div class="skel sk-line" style="width:45%;margin-bottom:1.3rem"></div>
         <div class="skel sk-line" style="width:65%"></div>
-      </div>`).join('');
+      </div>`).join('') + `</div>`;
   }
 
   // ── Render: summary ──────────────────────────────
@@ -1695,10 +1830,182 @@
     section.style.display = '';
   }
 
+  // ── Grouping & manual order ──────────────────────
+  function acctKey(a) { return `${a.bank}:${a.accountNumber}`; }
+
+  /** What each grouping mode groups by. */
+  const MODE_DIMS = {
+    'type-currency': ['entity', 'currency'],
+    'type':          ['entity'],
+    'currency':      ['currency'],
+    'bank':          ['bank'],
+    'none':          [],
+  };
+
+  /**
+   * A dimension is informative only while the accounts on screen actually differ
+   * along it — one bank, one currency or one type says nothing, so it is never
+   * mentioned. Hidden accounts do not count towards it.
+   */
+  function informativeDims() {
+    const ent = new Set(), cur = new Set(), bank = new Set();
+    for (const a of lastAccounts) {
+      if (hiddenAccounts.has(acctKey(a))) continue;
+      ent.add(entityOf(a));
+      cur.add(a.currency || '—');
+      bank.add(a.bank);
+    }
+    return { entity: ent.size > 1, currency: cur.size > 1, bank: bank.size > 1 };
+  }
+
+  /**
+   * The mode actually rendered: the stored mode minus its uninformative
+   * dimensions. The operator's choice itself stays stored, so it comes back by
+   * itself once the accounts start to differ along that dimension again.
+   */
+  function effGroupMode() {
+    const inf = informativeDims();
+    const dims = (MODE_DIMS[groupMode] || []).filter(d => inf[d]);
+    if (dims.length === 2) return 'type-currency';
+    if (dims[0] === 'entity')   return 'type';
+    if (dims[0] === 'currency') return 'currency';
+    if (dims[0] === 'bank')     return 'bank';
+    return 'none';
+  }
+
+  /** Group descriptor for an account under the active grouping mode. */
+  function groupOf(a) {
+    const entity = entityOf(a);
+    const currency = a.currency || '—';
+    switch (effGroupMode()) {
+      case 'type':     return { key: `e:${entity}`,              entity, currency: null, bank: null };
+      case 'currency': return { key: `c:${currency}`,            entity: null, currency, bank: null };
+      case 'bank':     return { key: `b:${a.bank}`,              entity, currency: null, bank: a.bank };
+      case 'none':     return { key: 'all',                      entity: null, currency: null, bank: null };
+      default:         return { key: `ec:${entity}|${currency}`, entity, currency, bank: null };
+    }
+  }
+
+  /** Order used when the operator has not moved anything yet: юр → физ, BYN → rest. */
+  function defaultGroupCmp(x, y) {
+    if (x.entity && y.entity) {
+      const d = entityMeta(x.entity).rank - entityMeta(y.entity).rank;
+      if (d !== 0) return d;
+    }
+    if (x.bank && y.bank && x.bank !== y.bank) {
+      return bankMeta(x.bank).label.localeCompare(bankMeta(y.bank).label, 'ru');
+    }
+    if (x.currency && y.currency && x.currency !== y.currency) {
+      const px = x.currency === 'BYN' ? 0 : 1;
+      const py = y.currency === 'BYN' ? 0 : 1;
+      return px !== py ? px - py : x.currency.localeCompare(y.currency);
+    }
+    return x.key.localeCompare(y.key);
+  }
+
+  /** Accounts the operator has not moved keep their account-number order, after the moved ones. */
+  function acctCmp(a, b) {
+    const ia = accountOrder.indexOf(acctKey(a));
+    const ib = accountOrder.indexOf(acctKey(b));
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return String(a.accountNumber || '').localeCompare(String(b.accountNumber || ''));
+  }
+
+  function buildGroups(accounts) {
+    const map = new Map();
+    for (const a of accounts) {
+      const g = groupOf(a);
+      if (!map.has(g.key)) map.set(g.key, { ...g, accounts: [] });
+      map.get(g.key).accounts.push(a);
+    }
+    const saved = groupOrder[effGroupMode()] || [];
+    const groups = [...map.values()].sort((x, y) => {
+      const ix = saved.indexOf(x.key), iy = saved.indexOf(y.key);
+      if (ix !== -1 && iy !== -1) return ix - iy;
+      if (ix !== -1) return -1;
+      if (iy !== -1) return 1;
+      return defaultGroupCmp(x, y);
+    });
+    for (const g of groups) g.accounts.sort(acctCmp);
+    return groups;
+  }
+
+  function groupTitle(g) {
+    const parts = [];
+    if (effGroupMode() === 'bank') parts.push(bankMeta(g.bank).label);
+    else if (g.entity && informativeDims().entity) parts.push(entityMeta(g.entity).label);
+    if (g.currency) parts.push(g.currency);
+    return parts.join(' · ') || 'Все счета';
+  }
+
+  function setGroupMode(mode) {
+    if (!GROUP_MODES.includes(mode)) return;
+    // Clicking the highlighted button is a no-op — and that button may be a
+    // stand-in for a collapsed type-aware mode, whose choice must survive.
+    if (mode === groupMode || mode === effGroupMode()) return;
+    groupMode = mode;
+    localStorage.setItem('groupMode', mode);
+    renderAccounts(lastAccounts);
+  }
+
+  function syncGroupModeSeg() {
+    const inf = informativeDims();
+    const eff = effGroupMode();
+    // Nothing left to group by → the whole switch is noise.
+    document.getElementById('group-mode-seg').hidden = !(inf.entity || inf.currency || inf.bank);
+    document.querySelectorAll('#group-mode-seg button').forEach(b => {
+      const m = b.dataset.mode;
+      b.hidden = m !== 'none' && !MODE_DIMS[m].every(d => inf[d]);
+      b.classList.toggle('is-active', m === eff);
+    });
+  }
+
+  function saveGroupOrder() { localStorage.setItem('groupOrder', JSON.stringify(groupOrder)); }
+  function saveAccountOrder() { localStorage.setItem('accountOrder', JSON.stringify(accountOrder)); }
+
+  function resetLayout() {
+    groupOrder = {};
+    accountOrder = [];
+    saveGroupOrder();
+    saveAccountOrder();
+    renderAccounts(lastAccounts);
+  }
+
+  function moveGroup(key, dir) {
+    const keys = buildGroups(lastAccounts).map(g => g.key);
+    const i = keys.indexOf(key), j = i + dir;
+    if (i === -1 || j < 0 || j >= keys.length) return;
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+    groupOrder[effGroupMode()] = keys;
+    saveGroupOrder();
+    renderAccounts(lastAccounts);
+  }
+
+  /** Moves an account one slot inside its own group; groups stay as they are. */
+  function moveAccount(key, dir) {
+    const groups = buildGroups(lastAccounts);
+    for (const g of groups) {
+      const i = g.accounts.findIndex(a => acctKey(a) === key);
+      if (i === -1) continue;
+      const j = i + dir;
+      if (j < 0 || j >= g.accounts.length) return;
+      [g.accounts[i], g.accounts[j]] = [g.accounts[j], g.accounts[i]];
+      break;
+    }
+    accountOrder = groups.flatMap(g => g.accounts.map(acctKey));
+    saveAccountOrder();
+    renderAccounts(lastAccounts);
+  }
+
   // ── Render: accounts ─────────────────────────────
   function renderAccounts(accounts) {
     lastAccounts = accounts || [];
+    // A poll landing mid-drag would rip the dragged card out of the DOM.
+    if (dragCtx) return;
     const grid = document.getElementById('accounts-grid');
+    syncGroupModeSeg();
 
     if (!accounts || accounts.length === 0) {
       document.getElementById('summary-section').style.display = 'none';
@@ -1726,22 +2033,73 @@
       return;
     }
 
-    grid.innerHTML = visibleAccounts.map(a => {
-      const key = `${a.bank}:${a.accountNumber}`;
+    const groups = buildGroups(visibleAccounts);
+    grid.innerHTML = groups.map((g, gi) => `
+      <section class="acct-group" data-group="${esc(g.key)}">
+        ${effGroupMode() === 'none' ? '' : groupHeadHtml(g, gi, groups.length)}
+        <div class="group-grid">
+          ${g.accounts.map((a, i) => accountCardHtml(a, i, g.accounts.length)).join('')}
+        </div>
+      </section>`).join('');
+    hydrateFavicons();
+  }
+
+  function groupHeadHtml(g, index, total) {
+    const shown = g.accounts.filter(a => !hiddenAccounts.has(acctKey(a))).length;
+    const hidden = g.accounts.length - shown;
+
+    const byCur = {};
+    for (const a of g.accounts) {
+      if (hiddenAccounts.has(acctKey(a))) continue;
+      const c = a.currency || '—';
+      byCur[c] = (byCur[c] || 0) + (a.balance || 0);
+    }
+    const totals = Object.entries(byCur)
+      .sort((x, y) => x[0] === 'BYN' ? -1 : y[0] === 'BYN' ? 1 : x[0].localeCompare(y[0]))
+      .map(([c, sum]) => `<span class="num">${fmtBalance(sum)}<span class="gt-cur">${esc(c)}</span></span>`)
+      .join('');
+
+    const pill = g.entity && informativeDims().entity
+      ? `<span class="entity-pill is-${g.entity}" title="${esc(entityMeta(g.entity).label)}">${entityMeta(g.entity).pill}</span>`
+      : '';
+
+    return `
+      <header class="group-head"${isEditMode ? ' draggable="true"' : ''}>
+        ${pill}
+        <span class="group-title" title="${esc(groupTitle(g))}">${esc(groupTitle(g))}</span>
+        <span class="group-count">${shown} ${plural(shown, 'счёт', 'счёта', 'счетов')}${hidden ? ` · скрыто ${hidden}` : ''}</span>
+        <span class="group-totals">${totals}</span>
+        <span class="sort-ctrls">
+          <button class="sort-btn" title="Выше" onclick="moveGroup('${esc(g.key)}',-1)" ${index === 0 ? 'disabled' : ''}>${CHEV_UP}</button>
+          <button class="sort-btn" title="Ниже" onclick="moveGroup('${esc(g.key)}',1)" ${index === total - 1 ? 'disabled' : ''}>${CHEV_DOWN}</button>
+          <span class="grip" title="Перетащите, чтобы переставить группу">${GRIP}</span>
+        </span>
+      </header>`;
+  }
+
+  function accountCardHtml(a, index, total) {
+      const key = acctKey(a);
       const isHidden = hiddenAccounts.has(key);
       const hasStmt = statementAccountKeys.has(key);
       const m = bankMeta(a.bank);
       const availLine = (a.available != null && a.available !== a.balance)
         ? `Доступно: <b>${fmtBalance(a.available)}&nbsp;${esc(a.currency)}</b>` : '';
       return `
-      <article class="card${isHidden ? ' is-hidden' : ''}"
+      <article class="card${isHidden ? ' is-hidden' : ''}" data-key="${esc(key)}"${isEditMode ? ' draggable="true"' : ''}
                style="--bank-color:${m.color};--bank-wash:${m.wash};--bank-ink:${m.ink}">
         <div class="card-top">
           <span class="bank-chip">
             <span class="bank-mono" data-bank="${esc(a.bank)}"><span class="bank-code">${esc(m.code)}</span></span>
             <span class="bank-name">${esc(m.label)}</span>
           </span>
-          <span class="cur-tag">${esc(a.currency)}</span>
+          <span class="card-side">
+            <span class="sort-ctrls">
+              <button class="sort-btn" title="Раньше в группе" onclick="moveAccount('${esc(key)}',-1)" ${index === 0 ? 'disabled' : ''}>${CHEV_UP}</button>
+              <button class="sort-btn" title="Позже в группе" onclick="moveAccount('${esc(key)}',1)" ${index === total - 1 ? 'disabled' : ''}>${CHEV_DOWN}</button>
+              <span class="grip" title="Перетащите, чтобы переставить счёт">${GRIP}</span>
+            </span>
+            <span class="cur-tag">${esc(a.currency)}</span>
+          </span>
         </div>
         ${a.name ? `<div class="acct-name" title="${esc(a.name)}">${esc(a.name)}</div>` : ''}
         <div class="acct-no" title="${esc(a.accountNumber)}">${fmtAccountNumber(a.accountNumber)}</div>
@@ -1774,8 +2132,79 @@
           </span>
         </div>
       </article>`;
-    }).join('');
-    hydrateFavicons();
+  }
+
+  // ── Reordering by drag & drop (edit mode) ────────
+  // Cards are draggable only inside their own group — the group is derived from
+  // the account's type/currency, so a card cannot belong to another one.
+  // Touch has no HTML5 drag events; the ↑/↓ buttons cover that case.
+  (function initReorder() {
+    const grid = document.getElementById('accounts-grid');
+
+    grid.addEventListener('dragstart', e => {
+      const src = e.target.closest('[draggable="true"]');
+      if (!src) return;
+      if (src.classList.contains('card')) {
+        dragCtx = { type: 'card', el: src, group: src.closest('.acct-group').dataset.group };
+      } else {
+        dragCtx = { type: 'group', el: src.closest('.acct-group') };
+      }
+      dragCtx.el.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', ''); // Firefox refuses to drag without data
+    });
+
+    grid.addEventListener('dragover', e => {
+      if (!dragCtx) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      if (dragCtx.type === 'card') {
+        const over = e.target.closest('.card');
+        if (!over || over === dragCtx.el) return;
+        if (over.closest('.acct-group').dataset.group !== dragCtx.group) return;
+        const r = over.getBoundingClientRect();
+        const dr = dragCtx.el.getBoundingClientRect();
+        // Same row → decide by X, different row → by Y.
+        const after = Math.abs(r.top - dr.top) < r.height / 2
+          ? e.clientX > r.left + r.width / 2
+          : e.clientY > r.top + r.height / 2;
+        over.parentNode.insertBefore(dragCtx.el, after ? over.nextSibling : over);
+      } else {
+        const over = e.target.closest('.acct-group');
+        if (!over || over === dragCtx.el) return;
+        const r = over.getBoundingClientRect();
+        const after = e.clientY > r.top + r.height / 2;
+        over.parentNode.insertBefore(dragCtx.el, after ? over.nextSibling : over);
+      }
+    });
+
+    grid.addEventListener('drop', e => { if (dragCtx) e.preventDefault(); });
+
+    grid.addEventListener('dragend', () => {
+      if (!dragCtx) return;
+      const { type, el } = dragCtx;
+      el.classList.remove('is-dragging');
+      dragCtx = null;                          // unblocks renderAccounts
+      if (type === 'card') commitCardOrder();
+      else commitGroupOrder();
+      renderAccounts(lastAccounts);            // re-renders counts and ↑/↓ states
+    });
+  })();
+
+  /** Reads the order back out of the DOM — edit mode renders every account, so
+   *  nothing is missing from it; any account no longer in the grid keeps its
+   *  place at the end. */
+  function commitCardOrder() {
+    const domKeys = [...document.querySelectorAll('#accounts-grid .card[data-key]')].map(el => el.dataset.key);
+    const seen = new Set(domKeys);
+    accountOrder = [...domKeys, ...accountOrder.filter(k => !seen.has(k))];
+    saveAccountOrder();
+  }
+
+  function commitGroupOrder() {
+    groupOrder[effGroupMode()] = [...document.querySelectorAll('#accounts-grid .acct-group')].map(el => el.dataset.group);
+    saveGroupOrder();
   }
 
   // Load each bank's favicon and swap it in only after it loads successfully —
@@ -1831,7 +2260,7 @@
       `${bankMeta(bank).label} · ${fmtAccountNumber(accountNumber)}`;
     document.getElementById('stmt-from').value = firstDayOfMonthStr();
     document.getElementById('stmt-to').value = todayStr();
-    document.querySelectorAll('.seg button').forEach((t, i) => t.classList.toggle('is-active', i === 0));
+    document.querySelectorAll('#stmt-modal .seg button').forEach((t, i) => t.classList.toggle('is-active', i === 0));
     document.getElementById('stmt-search').value = '';
     document.getElementById('stmt-search-clear').hidden = true;
     document.getElementById('stmt-status').textContent = '';
@@ -1902,7 +2331,7 @@
   }
 
   function setStmtDir(btn) {
-    document.querySelectorAll('.seg button').forEach(t => t.classList.remove('is-active'));
+    document.querySelectorAll('#stmt-modal .seg button').forEach(t => t.classList.remove('is-active'));
     btn.classList.add('is-active');
     renderStmtTable(lastTxs);
   }
@@ -1945,7 +2374,7 @@
 
   function renderStmtTable(txs) {
     const el = document.getElementById('stmt-content');
-    const direction = document.querySelector('.seg button.is-active')?.dataset.dir ?? 'all';
+    const direction = document.querySelector('#stmt-modal .seg button.is-active')?.dataset.dir ?? 'all';
     const q = stmtQuery();
     const filtered = txs.filter(t =>
       (direction === 'debit'  ? t.debit  != null :
@@ -2089,6 +2518,7 @@
   function showDashboard() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+    syncGroupModeSeg();
   }
 
   // ════════════════════ DEMO DATA LAYER ═══════════
@@ -2106,6 +2536,8 @@
       { id:6, bank:'belveb',      accountNumber:'BY77BELB30141RUB000000077', currency:'RUB', name:'Счёт в российских руб.', balance:1250000.00,available:1250000.00,balanceUpdatedAt:nowIso(4) },
       { id:7, bank:'paritetbank', accountNumber:'BY52POIS30120557788000044', currency:'BYN', name:'Расчётный счёт',        balance:47820.33,  available:46500.00,  balanceUpdatedAt:nowIso(9) },
       { id:8, bank:'paritetbank', accountNumber:'BY19POIS30140USD000000088', currency:'USD', name:'Валютный счёт USD',     balance:9300.00,   available:9300.00,   balanceUpdatedAt:nowIso(9) },
+      { id:9, bank:'iparitet',    accountNumber:'BY65POIS30141CARD00000199', currency:'BYN', name:'Карта · 5299 ** 4412',  balance:3184.62,   available:3184.62,   balanceUpdatedAt:nowIso(2) },
+      { id:10,bank:'iparitet',    accountNumber:'BY72POIS30140USD000000201', currency:'USD', name:'Текущий счёт USD',      balance:1450.00,   available:1450.00,   balanceUpdatedAt:nowIso(2) },
     ];
     const totals = [
       { bank:'alfabank',  accountNumber:'BY24ALFA30120A45612000840', currency:'BYN', totalCredit:12480.00, totalDebit:3120.55 },
