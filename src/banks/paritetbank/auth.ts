@@ -43,34 +43,11 @@ export async function login(): Promise<Page> {
       return page;
     }
 
-    // Wait for the login form to render inside the Vue app
-    logger.debug('[paritetbank] Waiting for login form...');
-    await page.waitForSelector('input[autocomplete="login"], .login input[type="text"]', {
-      timeout: 20_000,
-    });
-    await saveDebugSnapshot(page, 'paritetbank-02-form');
-
-    logger.debug('[paritetbank] Filling login');
-    const loginInput = page.locator('input[autocomplete="login"]').first();
-    await loginInput.click();
-    await loginInput.fill(bankLogin);
-
-    logger.debug('[paritetbank] Filling password');
-    const passwordInput = page.locator('input[type="password"]').first();
-    await passwordInput.click();
-    await passwordInput.fill(bankPassword);
-
-    await saveDebugSnapshot(page, 'paritetbank-03-filled');
-
-    logger.debug('[paritetbank] Submitting login form');
-    await page.locator('button[type="submit"]').first().click();
+    await submitCredentials(page, bankLogin, bankPassword);
 
     // Wait for Vue Router to navigate away from /sign-in
     logger.debug('[paritetbank] Waiting for post-login navigation...');
-    await page.waitForFunction(
-      () => !window.location.href.includes('/sign-in'),
-      { timeout: 30_000, polling: 500 },
-    );
+    await waitForPostLogin(page, bankLogin, bankPassword);
 
     // Handle multi-organisation selection page
     if (page.url().includes('/select-organizations')) {
@@ -92,6 +69,63 @@ export async function login(): Promise<Page> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const LOGIN_INPUT = 'input[autocomplete="login"]';
+
+async function submitCredentials(page: Page, bankLogin: string, bankPassword: string): Promise<void> {
+  // Wait for the login form to render inside the Vue app
+  logger.debug('[paritetbank] Waiting for login form...', { url: page.url() });
+  await page.waitForSelector(`${LOGIN_INPUT}, .login input[type="text"]`, { timeout: 20_000 });
+  await saveDebugSnapshot(page, 'paritetbank-02-form');
+
+  logger.debug('[paritetbank] Filling login');
+  const loginInput = page.locator(LOGIN_INPUT).first();
+  await loginInput.click();
+  await loginInput.fill(bankLogin);
+
+  logger.debug('[paritetbank] Filling password');
+  const passwordInput = page.locator('input[type="password"]').first();
+  await passwordInput.click();
+  await passwordInput.fill(bankPassword);
+
+  await saveDebugSnapshot(page, 'paritetbank-03-filled');
+
+  logger.debug('[paritetbank] Submitting login form');
+  await page.locator('button[type="submit"]').first().click();
+}
+
+// Since 09.2026 accounts migrated to the bank's "new IT architecture" get
+// `redirectUri: https://new.eparitet.by/` from auth/signin: the SPA shows a notice
+// whose «Перейти» button moves to that host — which keeps its own session and asks
+// for the credentials again.
+const NOTICE_BUTTON = '.signin-ms-modal__button';
+
+async function waitForPostLogin(
+  page: Page,
+  bankLogin: string,
+  bankPassword: string,
+  timeoutMs = 45_000,
+): Promise<void> {
+  const signedInOn = new Set([new URL(page.url()).host]);
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!page.url().includes(SIGN_IN_PATH)) return;
+
+    const host = new URL(page.url()).host;
+    const notice = page.locator(NOTICE_BUTTON).first();
+    if (await notice.isVisible().catch(() => false)) {
+      logger.info('[paritetbank] Dismissing migration notice («Перейти»)');
+      await notice.click().catch(() => null);
+    } else if (!signedInOn.has(host) && await page.locator(LOGIN_INPUT).first().isVisible().catch(() => false)) {
+      logger.info('[paritetbank] Redirected to another host — signing in there', { host });
+      signedInOn.add(host);
+      await submitCredentials(page, bankLogin, bankPassword);
+    }
+
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`still on ${page.url()} after ${timeoutMs / 1000}s`);
+}
 
 async function handleOrgSelection(page: Page): Promise<void> {
   const preferredOrg = getConfig('PARITETBANK_ORG')?.trim();

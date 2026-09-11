@@ -216,6 +216,19 @@ a **random** `id`, an empty `type=""` for the login field, and binds its control
 name/type/formcontrolname. Raw JSON is dumped to `./data/debug/iparitet-*.json` when
 `DEBUG_SCREENSHOTS=true`.
 
+### Паритетбанк (corporate): migration to `new.eparitet.by`
+
+Since 09.2026 the bank moves accounts to a "new IT architecture" host. For a
+migrated account `POST eparitet.by/corporate/web-api/v1/auth/signin` answers
+`{isMicroServicesResourceAvailable: true, redirectUri: "https://new.eparitet.by/"}`,
+the SPA stays on `/sign-in` and shows a notice (`.signin-ms-modal`) whose «Перейти»
+button navigates to `new.eparitet.by/sign-in`. That host has its **own** session
+cookie, so the credentials are submitted a second time there
+(`waitForPostLogin` in `paritetbank/auth.ts`). The API paths
+(`/corporate/web-api/v1/...`) are the same on both hosts, and scrapers call them
+relative to the page, so they follow the page to the new host. Before this fix the
+login silently hung on `/sign-in` → `waitForFunction: Timeout 30000ms exceeded`.
+
 ### Priorbank: two cabinets, one session
 
 Priorbank runs **two** front-ends side by side on the same session cookie:
