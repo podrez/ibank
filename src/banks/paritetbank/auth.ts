@@ -5,7 +5,10 @@ import { saveDebugSnapshot } from '../../utils/debug';
 import { getConfig } from '../../config/store';
 
 const BANK_ID = 'paritetbank';
-const BASE_URL = 'https://eparitet.by';
+// The account lives on the bank's "new IT architecture" host. Signing in on the old
+// https://eparitet.by still works but redirects here and needs a second sign-in
+// (see waitForPostLogin).
+const BASE_URL = 'https://new.eparitet.by';
 // Vue Router path used for the login page
 const SIGN_IN_PATH = '/sign-in';
 
@@ -94,10 +97,11 @@ async function submitCredentials(page: Page, bankLogin: string, bankPassword: st
   await page.locator('button[type="submit"]').first().click();
 }
 
-// Since 09.2026 accounts migrated to the bank's "new IT architecture" get
-// `redirectUri: https://new.eparitet.by/` from auth/signin: the SPA shows a notice
-// whose «Перейти» button moves to that host — which keeps its own session and asks
-// for the credentials again.
+// Safety net for a host that redirects elsewhere: since 09.2026 signing in on the old
+// eparitet.by returns `redirectUri: https://new.eparitet.by/` from auth/signin, and the
+// SPA shows a notice whose «Перейти» button moves to that host — which keeps its own
+// session and asks for the credentials again. BASE_URL now points at the new host
+// directly, so this only kicks in if the bank starts redirecting again.
 const NOTICE_BUTTON = '.signin-ms-modal__button';
 
 async function waitForPostLogin(

@@ -223,11 +223,27 @@ migrated account `POST eparitet.by/corporate/web-api/v1/auth/signin` answers
 `{isMicroServicesResourceAvailable: true, redirectUri: "https://new.eparitet.by/"}`,
 the SPA stays on `/sign-in` and shows a notice (`.signin-ms-modal`) whose «Перейти»
 button navigates to `new.eparitet.by/sign-in`. That host has its **own** session
-cookie, so the credentials are submitted a second time there
-(`waitForPostLogin` in `paritetbank/auth.ts`). The API paths
+cookie, so the credentials had to be submitted a second time there. Before handling
+this the login silently hung on `/sign-in` → `waitForFunction: Timeout 30000ms exceeded`.
+
+`BASE_URL` in `paritetbank/auth.ts` therefore points at **`https://new.eparitet.by`**
+directly: one sign-in, no notice, dashboard in under a second.
+`waitForPostLogin` still dismisses the notice and re-submits credentials on a new
+host, as a safety net should the bank start redirecting again. The API paths
 (`/corporate/web-api/v1/...`) are the same on both hosts, and scrapers call them
-relative to the page, so they follow the page to the new host. Before this fix the
-login silently hung on `/sign-in` → `waitForFunction: Timeout 30000ms exceeded`.
+relative to the page, so nothing else depends on the host.
+
+**Stale keep-alive connections.** `new.eparitet.by` answers `Keep-Alive: timeout=15`
+and then silently drops idle connections (no FIN/RST). Chrome reuses the dead socket
+and the request hangs ~114 s (time spent *before* the request is sent —
+`timing().requestStart`; server TTFB is < 1 s). Any call after ≥ 20 s of idleness hit
+it, i.e. every scheduler tick. `dropStaleConnections()` (`paritetbank/connection.ts`)
+runs before scraping and before the keepalive ping: 6 parallel `info/getSettings` with a
+4 s abort take every pooled socket (Chrome allows 6 per HTTP/1.1 host) and aborting the
+hung ones closes them. Two things that do **not** work: Playwright's `ctx.request` (Node
+fails TLS — the host serves an incomplete certificate chain, `unable to verify the first
+certificate`), and a per-request timeout with sequential retries (one dead socket per
+attempt, up to 6 × timeout).
 
 ### Priorbank: two cabinets, one session
 

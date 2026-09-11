@@ -5,6 +5,7 @@ import { Page } from 'playwright';
 import { login, isLoggedIn } from './auth';
 import { scrapeAccounts } from './accounts';
 import { scrapeStatement as doScrapeStatement } from './statements';
+import { dropStaleConnections } from './connection';
 
 const API_BASE = '/corporate/web-api/v1';
 // eParitet session timeout is not published; ping every 10 min as a precaution.
@@ -74,6 +75,7 @@ export class ParitetbankAdapter implements BankAdapter {
       return;
     }
     try {
+      await dropStaleConnections(this.activePage);
       const ok = await this.activePage.evaluate(async (apiBase: string) => {
         try {
           const res = await fetch(`${apiBase}/info/getSettings`, {

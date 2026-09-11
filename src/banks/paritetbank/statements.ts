@@ -5,6 +5,7 @@ import fs from 'fs';
 import { parseDate, isoToDMY } from '../../utils/dates';
 import { makeSnapper } from '../../utils/debug';
 import { getConfig } from '../../config/store';
+import { dropStaleConnections } from './connection';
 
 const API_BASE = '/corporate/web-api/v1';
 const DEBUG_DIR = './data/debug';
@@ -40,6 +41,8 @@ export async function scrapeStatement(
   });
 
   const snap = makeSnapper(page, 'paritetbank', req.accountNumber);
+
+  await dropStaleConnections(page);
 
   // 1. Resolve internal account ID from account number
   const accountId = await resolveAccountId(page, req.accountNumber);

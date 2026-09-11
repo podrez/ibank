@@ -3,6 +3,7 @@ import { ScrapedAccount } from '../types';
 import { logger } from '../../logger';
 import fs from 'fs';
 import { getConfig } from '../../config/store';
+import { dropStaleConnections } from './connection';
 
 const API_BASE = '/corporate/web-api/v1';
 
@@ -21,6 +22,7 @@ interface ParitetAccount {
 
 export async function scrapeAccounts(page: Page): Promise<ScrapedAccount[]> {
   logger.info('[paritetbank] Fetching accounts via API');
+  await dropStaleConnections(page);
 
   const data = await page.evaluate(async (apiBase: string) => {
     try {
