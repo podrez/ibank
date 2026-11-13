@@ -3,12 +3,15 @@ import { ScrapedTransaction, StatementRequest } from '../types';
 import { logger } from '../../logger';
 import { db, schema } from '../../db';
 import { and, eq } from 'drizzle-orm';
-import { parseDate, isoToDMY } from '../../utils/dates';
+import { parseDate, isoToDMY, localToday } from '../../utils/dates';
 import { makeSnapper } from '../../utils/debug';
 import { strPick, numPick } from '../../utils/scrape';
+import { computeTxKey } from '../../utils/txkey';
 
 const BASE_URL = 'https://dbo2.bveb.by';
 const VPSK_BASE = '/Cabinet/Accounts/Vpsk/Extract/';
+/** «Дата: сегодня» radio of the Vpsk form (Periods.SelectedValue=Today). */
+const TODAY_PERIOD_RADIO = '#Periods_Today, input[name="Periods.SelectedValue"][value="Today"]';
 
 const CURRENCY_CODES: Record<string, string> = {
   BYN: '933', USD: '840', EUR: '978', RUB: '643', CNY: '156',
@@ -27,11 +30,109 @@ export async function scrapeStatement(
   // 1. Build URL with numeric currency code from DB; also keep ISO code for transactions
   const { isoCode: accountCurrency, numericCode: currencyCode } = await lookupCurrencyInfo(req.accountNumber);
   const vpskUrl = buildVpskUrl(req.accountNumber, currencyCode);
+
+  await openVpskForm(page, vpskUrl, snap);
+
+  // 3. Fill date range using Kendo JS API (most reliable on BIA platform)
+  logger.debug('[belveb:stmt] Filling date range', { from: req.dateFrom, to: req.dateTo });
+  await fillDatesViaKendo(page, req.dateFrom, req.dateTo);
+  await page.waitForTimeout(400);
+  await snap('03-dates-filled');
+
+  const allTransactions = await submitAndCollect(page, req, accountCurrency, snap, '');
+
+  if (allTransactions.length === 0) {
+    logger.warn(
+      '[belveb:stmt] No transactions found. ' +
+      'Set DEBUG_SCREENSHOTS=true and inspect ./data/debug/ for belveb-stmt-* files.',
+    );
+  } else {
+    logger.info('[belveb:stmt] All pages fetched', { total: allTransactions.length });
+  }
+
+  // 6. Current day. «За период» returns closed operating days only — even with
+  // DateTo = today the bank leaves today out. The «сегодня» period of the same
+  // form lists today's posted operations in the same grid, so they come out with
+  // the same fields (and tx_key) the next morning's statement will show.
+  const today = localToday();
+  if (req.dateTo >= today) {
+    try {
+      const intraday = await scrapeToday(page, req, vpskUrl, accountCurrency, snap, today);
+      const seen = new Set(allTransactions.map(dedupKey));
+      const fresh = intraday.filter((t) => !seen.has(dedupKey(t)));
+      allTransactions.push(...fresh);
+      logger.info('[belveb:stmt] Current-day operations fetched', {
+        account: req.accountNumber, date: today, count: intraday.length, added: fresh.length,
+      });
+    } catch (err) {
+      logger.warn('[belveb:stmt] Current-day operations unavailable — returning closed days only', {
+        account: req.accountNumber, err: String(err),
+      });
+    }
+  }
+
+  // Return to cabinet dashboard so the next balance sync finds the accounts widget.
+  // BelVEB server-side session remembers the last visited portlet page and redirects
+  // /Cabinet/ back to it, so we must explicitly navigate away after statement scraping.
+  try {
+    await page.goto('https://dbo2.bveb.by/Cabinet/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+    await page.waitForTimeout(800);
+    logger.info('[belveb:stmt] Returned to cabinet dashboard after statement scrape');
+  } catch { /* non-fatal */ }
+
+  return allTransactions;
+}
+
+function dedupKey(t: ScrapedTransaction): string {
+  return `${t.transactionDate}|${computeTxKey(t)}`;
+}
+
+/**
+ * Re-open the Vpsk form, switch the period to «сегодня» and read the grid.
+ * Rows dated other than `today` are dropped — the closed days come from the
+ * «за период» request.
+ */
+async function scrapeToday(
+  page: Page,
+  req: StatementRequest,
+  vpskUrl: string,
+  accountCurrency: string,
+  snap: (label: string) => Promise<void>,
+  today: string,
+): Promise<ScrapedTransaction[]> {
+  await openVpskForm(page, vpskUrl, snap, 'today-');
+
+  const radio = page.locator(TODAY_PERIOD_RADIO).first();
+  await radio.check({ force: true, timeout: 10_000 });
+  if (!(await radio.isChecked())) throw new Error('«сегодня» period radio did not get checked');
+  await page.waitForTimeout(400);
+  await snap('today-03-period-set');
+
+  const rows = await submitAndCollect(page, req, accountCurrency, snap, 'today-', 'Today');
+  const other = rows.filter((t) => t.transactionDate !== today);
+  if (other.length > 0) {
+    logger.warn('[belveb:stmt] «сегодня» returned rows of other dates — dropped', {
+      today, dates: [...new Set(other.map((t) => t.transactionDate))],
+    });
+  }
+  return rows.filter((t) => t.transactionDate === today);
+}
+
+/**
+ * Navigate to the Vpsk Extract page and wait for its portlet form. Retries once
+ * through /Cabinet/ when the portal bounces the direct link.
+ */
+async function openVpskForm(
+  page: Page,
+  vpskUrl: string,
+  snap: (label: string) => Promise<void>,
+  prefix = '',
+): Promise<void> {
   logger.debug('[belveb:stmt] Navigating to Vpsk Extract', { url: vpskUrl });
 
   await page.goto(vpskUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.waitForTimeout(1_500);
-  await snap('01-vpsk-loaded');
+  await snap(`${prefix}01-vpsk-loaded`);
 
   if (!page.url().includes('/Cabinet/')) {
     // BIA portal rejects direct Vpsk access when the accounts portlet hasn't been
@@ -43,7 +144,7 @@ export async function scrapeStatement(
     await page.waitForTimeout(2_000);
     await page.goto(vpskUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 });
     await page.waitForTimeout(1_500);
-    await snap('01b-vpsk-retry');
+    await snap(`${prefix}01b-vpsk-retry`);
 
     if (!page.url().includes('/Cabinet/')) {
       logger.error('[belveb:stmt] Redirected away from Cabinet — session expired', { url: page.url() });
@@ -62,14 +163,22 @@ export async function scrapeStatement(
     },
     { timeout: 25_000, polling: 400 },
   ).catch(() => null);
-  await snap('02-portlet-loaded');
+  await snap(`${prefix}02-portlet-loaded`);
+}
 
-  // 3. Fill date range using Kendo JS API (most reliable on BIA platform)
-  logger.debug('[belveb:stmt] Filling date range', { from: req.dateFrom, to: req.dateTo });
-  await fillDatesViaKendo(page, req.dateFrom, req.dateTo);
-  await page.waitForTimeout(400);
-  await snap('03-dates-filled');
-
+/**
+ * Submit the filled Vpsk form and collect every page of the result grid.
+ * `expectPeriod`, when set, is checked against the submitted `Period` field so a
+ * radio that silently failed to switch can't pass off a period statement as today's.
+ */
+async function submitAndCollect(
+  page: Page,
+  req: StatementRequest,
+  accountCurrency: string,
+  snap: (label: string) => Promise<void>,
+  prefix: string,
+  expectPeriod?: string,
+): Promise<ScrapedTransaction[]> {
   // 4. Submit and wait for AJAX response.
   // BIA platform sends results to SubmitUrl=/Vpsk/List and updates #vpsk-list-result.
   logger.debug('[belveb:stmt] Submitting form and waiting for AJAX response...');
@@ -82,9 +191,17 @@ export async function scrapeStatement(
       ),
       clickSubmit(page),
     ]);
+    if (expectPeriod) {
+      const sent = new URLSearchParams(response.request().postData() ?? '').get('Period');
+      if (sent !== expectPeriod) {
+        throw new Error(`[belveb:stmt] submitted Period=${sent ?? '∅'}, expected ${expectPeriod}`);
+      }
+    }
     ajaxResponseHtml = await response.text();
     logger.debug('[belveb:stmt] AJAX response received', { bytes: ajaxResponseHtml.length, url: response.url() });
   } catch (err) {
+    // Without the request we can't tell which period the bank answered for.
+    if (expectPeriod) throw err;
     logger.warn('[belveb:stmt] waitForResponse timed out, falling back to DOM', { err: String(err) });
     await clickSubmit(page);
   }
@@ -92,7 +209,7 @@ export async function scrapeStatement(
   // Wait for DOM to settle after AJAX
   await page.waitForLoadState('networkidle').catch(() => null);
   await page.waitForTimeout(1_000);
-  await snap('04-results');
+  await snap(`${prefix}04-results`);
 
   // 5. Extract all pages of transactions
   const allTransactions: ScrapedTransaction[] = [];
@@ -156,24 +273,6 @@ export async function scrapeStatement(
     allTransactions.push(...pageTx);
     logger.info(`[belveb:stmt] Page ${pageNum}: +${pageTx.length} (total: ${allTransactions.length})`);
   }
-
-  if (allTransactions.length === 0) {
-    logger.warn(
-      '[belveb:stmt] No transactions found. ' +
-      'Set DEBUG_SCREENSHOTS=true and inspect ./data/debug/ for belveb-stmt-* files.',
-    );
-  } else {
-    logger.info('[belveb:stmt] All pages fetched', { total: allTransactions.length });
-  }
-
-  // Return to cabinet dashboard so the next balance sync finds the accounts widget.
-  // BelVEB server-side session remembers the last visited portlet page and redirects
-  // /Cabinet/ back to it, so we must explicitly navigate away after statement scraping.
-  try {
-    await page.goto('https://dbo2.bveb.by/Cabinet/', { waitUntil: 'domcontentloaded', timeout: 15_000 });
-    await page.waitForTimeout(800);
-    logger.info('[belveb:stmt] Returned to cabinet dashboard after statement scrape');
-  } catch { /* non-fatal */ }
 
   return allTransactions;
 }

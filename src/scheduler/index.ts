@@ -13,6 +13,18 @@ function getEndHour(): number   { return parseInt(getConfig('SCHEDULE_END_HOUR')
 function getInterval(): number  { return parseInt(getConfig('SCHEDULE_INTERVAL_MINUTES') ?? '5'); }
 function getTimezone(): string  { return getConfig('APP_TIMEZONE') ?? 'Europe/Minsk'; }
 
+/**
+ * End of the polling window for one bank: `<BANK>_SCHEDULE_END_HOUR` (e.g.
+ * BELVEB_SCHEDULE_END_HOUR) when set, otherwise the common SCHEDULE_END_HOUR.
+ * Lets a bank whose operations keep posting after 17:00 be polled into the
+ * evening — before 1C's 20:30 statement import — without stretching the window
+ * for every corporate bank.
+ */
+function getEndHourFor(bank: BankAdapter): number {
+  const own = parseInt(getConfig(`${bank.id.toUpperCase()}_SCHEDULE_END_HOUR`) ?? '');
+  return Number.isFinite(own) ? own : getEndHour();
+}
+
 function getExtraWorkingDays(): Set<string> {
   return new Set(
     (getConfig('EXTRA_WORKING_DAYS') ?? '')
@@ -55,6 +67,9 @@ export function startScheduler(): void {
     cronExpr,
     timezone,
     schedule: `Retail (24/7) every ${interval} min; corporate Mon–Fri ${startHour}:00–${endHour}:00 ${timezone} (+ extra working days: ${[...extraDays].join(', ') || 'none'})`,
+    ownEndHour: Object.fromEntries(getEnabledBanks()
+      .filter((b) => !b.roundTheClock && getEndHourFor(b) !== endHour)
+      .map((b) => [b.id, getEndHourFor(b)])),
   });
 
   syncTask = cron.schedule(cronExpr, () => { runSyncForBanks(banksDueNow()); }, { timezone });
@@ -80,13 +95,15 @@ export function stopScheduler(): void {
  * banks only inside the business window.
  */
 function banksDueNow(): BankAdapter[] {
-  const inBusinessWindow = isWorkingDay() && isWorkingHour();
-  return getEnabledBanks().filter((b) => b.roundTheClock || inBusinessWindow);
+  const workingDay = isWorkingDay();
+  const hour = currentHour();
+  return getEnabledBanks().filter((b) =>
+    b.roundTheClock || (workingDay && hour >= getStartHour() && hour < getEndHourFor(b)));
 }
 
-function isWorkingHour(): boolean {
-  const hour = parseInt(new Intl.DateTimeFormat('en', { timeZone: getTimezone(), hour: 'numeric', hour12: false }).format(new Date()));
-  return hour >= getStartHour() && hour < getEndHour();
+function currentHour(): number {
+  // hourCycle h23: 'en' with hour12:false renders midnight as "24" in some ICU builds
+  return parseInt(new Intl.DateTimeFormat('en', { timeZone: getTimezone(), hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
 }
 
 /**

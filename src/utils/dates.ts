@@ -1,3 +1,5 @@
+import { getConfig } from '../config/store';
+
 /**
  * Parse a raw date string from any of the formats used by Belarusian bank APIs:
  *   - ISO yyyy-MM-dd or yyyy-MM-ddTHH:mm:ss...
@@ -29,4 +31,13 @@ export function isoToDMY(iso: string): string {
 /** Today's date as ISO yyyy-MM-dd (UTC). */
 export function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Today's date as ISO yyyy-MM-dd in APP_TIMEZONE (Europe/Minsk by default) —
+ * the banks' calendar day. Differs from {@link isoToday} between 00:00 and 03:00 Minsk.
+ */
+export function localToday(): string {
+  const timeZone = getConfig('APP_TIMEZONE') ?? 'Europe/Minsk';
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
 }

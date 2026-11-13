@@ -354,7 +354,7 @@ router.post('/settings', async (req, res) => {
     const body = req.body as Record<string, string>;
 
     const BANK_IDS = ['alfabank', 'priorbank', 'belveb', 'paritetbank', 'iparitet'] as const;
-    const SCHEDULER_KEYS = new Set(['SCHEDULE_START_HOUR', 'SCHEDULE_END_HOUR', 'SCHEDULE_INTERVAL_MINUTES', 'APP_TIMEZONE', 'EXTRA_WORKING_DAYS']);
+    const SCHEDULER_KEYS = new Set(['SCHEDULE_START_HOUR', 'SCHEDULE_END_HOUR', 'BELVEB_SCHEDULE_END_HOUR', 'SCHEDULE_INTERVAL_MINUTES', 'APP_TIMEZONE', 'EXTRA_WORKING_DAYS']);
     const BROWSER_KEYS   = new Set(['HEADLESS', 'BROWSER_TIMEOUT_MS', 'CHROMIUM_EXECUTABLE_PATH']);
 
     let restartScheduler = false;

@@ -281,6 +281,33 @@ page so the session cookie is attached, no DOM scraping:
 Other useful `/v2/` endpoints seen in the new cabinet: `User/CheckSessionAlive`,
 `User/GetUserMenu`, `Accounts/GetAccountList` (balances, if the old cabinet ever dies).
 
+### БелВЭБ: current-day operations
+
+The statement form (`/Cabinet/Accounts/Vpsk/Extract/`, submits to `Vpsk/List`) has a
+period switch — «сегодня» / «вчера» / «последняя» / «за период» / «за дату»
+(`Periods.SelectedValue` = `Today` / … / `Period` / `ForDate`). **«За период» returns
+closed operating days only**: with `DateTo` = today (verified in the POST body) the bank
+silently leaves today out, so every operation used to reach the DB the next morning.
+«Сегодня» lists today's posted operations in the same grid, with the same columns.
+
+`scrapeStatement` therefore runs «за период» as before and, when `dateTo` ≥ today in
+APP_TIMEZONE (`localToday()`, not the UTC `isoToday()`), re-opens the form, checks
+`#Periods_Today` and reads the grid again (`scrapeToday`). It asserts the submitted
+`Period=Today`, keeps only rows dated today and merges them by `tx_key`. A failure there
+is a `warn` — the closed days are still returned. Because both requests come from one
+report, the next morning's statement row has the same `tx_key` and is skipped.
+
+`BELVEB_SCHEDULE_END_HOUR` (generic `<BANK>_SCHEDULE_END_HOUR`, `getEndHourFor` in the
+scheduler) extends the polling window for БелВЭБ alone, so operations posted after 17:00
+reach the cache before 1C's 20:30 import.
+
+Also seen on this cabinet: `kendo.dataFor` is undefined (Kendo 2018.3), so dates are
+always typed via the keyboard fallback; the very first navigation after a login
+occasionally answers `302 → /Default?reason=SessionTimeout` (the next cycle logs in
+again); and the keepalive `/Bia.Controllers/SessionIsAlive/Check` answers 404.
+`src/tools/belveb-recon.ts` dumps the cabinet menu, forms and XHRs for this kind of
+investigation — delete `data/debug/belveb-*` afterwards (login snapshots hold the form).
+
 ### Scraper selector adjustment
 
 If a bank's scraper can't find account cards (DOM scraping path), set `DEBUG_SCREENSHOTS=true` in `.env`. Each bank saves its debug files with a bank prefix:
