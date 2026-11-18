@@ -1,8 +1,10 @@
 # Account Balances Service
 
-Headless browser service that logs into multiple Belarusian banks, scrapes account balances on a schedule, persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
+Headless browser service that logs into multiple Belarusian banks, scrapes account balances and statements on a schedule, persists them to SQLite, and exposes a REST API for consumption by a 1C accounting system.
 
-**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY corporate (`eparitet.by`), Паритетбанк физлица / iParitet (`iparitet.by`)
+Corporate banks are polled every 5 minutes on working days 09:00–17:00 Minsk time; retail banks that operate 24/7 (iParitet) are polled around the clock. Besides cached balances and transactions, the API can read a few things live from the bank on request — e.g. the last outgoing payment order number at Priorbank.
+
+**Supported banks:** Alfa-Bank BY (`online.alfabank.by`), Priorbank BY (`www.ibank.priorbank.by`), БелВЭБ BY (`dbo2.bveb.by`), Паритетбанк BY corporate (`new.eparitet.by`), Паритетбанк физлица / iParitet (`iparitet.by`)
 
 ## Tech stack
 
@@ -12,6 +14,11 @@ Headless browser service that logs into multiple Belarusian banks, scrapes accou
 - **Express** — REST API
 - **node-cron** — scheduler
 - **Docker** — containerised deployment
+
+## Requirements
+
+- Node.js 20 (the Docker image is built on `node:20-slim`) — or just Docker
+- Bank credentials for each bank you want to enable
 
 ## Quick start
 
@@ -42,6 +49,8 @@ docker compose up --build -d
 docker compose logs -f
 ```
 
+The container applies DB migrations on start (`node dist/db/migrate.js && node dist/index.js`) and keeps the database, sessions and debug files in the `account-balances-data` volume (`/app/data`).
+
 The service is available at `http://localhost:3000`.
 
 ## Web UI
@@ -50,12 +59,13 @@ A built-in dashboard is served at `http://localhost:3000/`.
 
 - **Login screen** — enter the `API_KEY` value; the key is stored in `sessionStorage` for the browser session.
 - **Account cards** — show bank name, account number, currency, current balance, the time the balance was last scraped, and today's credit/debit totals.
+- **Grouping** — cards are grouped by «Тип · валюта», «Тип», «Валюта», «Банк» or «Без групп», with per-group totals. In edit mode groups and cards can be reordered by drag and drop. Mode and order are stored in `localStorage`.
 - **Sync button** — triggers `POST /api/refresh` and reloads data after 6 seconds.
 - **Auto-refresh** — accounts are polled every 30 seconds with a visible countdown in the header.
 - **Visibility toggle** — the gear button enters edit mode where individual accounts can be hidden from the dashboard. Hidden state is stored in `localStorage`.
 - **Statement viewer** — accounts enabled for statement sync show a "Выписка" button. Clicking it opens a modal with a filterable transaction table (date range, counterparty name and UNP, description, debit/credit) and an "Обновить из банка" button to trigger a fresh download from the bank.
 - **Settings panel** — the sliders button in the header opens a settings modal with sections:
-  - **Банки** — credentials (login/password) for each bank; a bank becomes enabled as soon as its login is saved. Alfa-Bank additionally shows a **«Вход по SMS»** panel for the operator-driven SMS login (see [Interactive SMS login](#interactive-sms-login-alfa-bank)).
+  - **Банки** — credentials (login/password) for each bank; a bank becomes enabled as soon as its login is saved. Alfa-Bank and iParitet additionally show a **«Вход по SMS»** panel for the operator-driven SMS login (see [Interactive SMS login](#interactive-sms-login-alfa-bank-iparitet)).
   - **Выписки** — checkboxes over all scraped accounts; toggling an account adds or removes it from automatic statement sync.
   - **Расписание** — start/end hours, interval, timezone, extra working days.
   - **REST API** — API key rotation (requires re-login after change); API port is shown read-only.
@@ -67,22 +77,25 @@ Settings saved via the UI are persisted to the `settings` table in SQLite and ta
 
 No build step is required; the UI is a single self-contained HTML file served by Express.
 
-## Interactive SMS login (Alfa-Bank)
+## Interactive SMS login (Alfa-Bank, iParitet)
 
-Alfa-Bank BY requires an SMS one-time code at login. To avoid requesting an SMS on
-every scrape cycle (which gets rate-limited and risks blocking the account), the
-**scheduled scraper never submits credentials** — it only reuses a saved session:
+Alfa-Bank BY and iParitet ask for an SMS one-time code only when they challenge a
+new device/session; an ordinary login/password sign-in goes straight through. So:
 
-- Automated `login()` is **session-only**: it reuses the session persisted to
-  `<SESSION_DIR>/alfabank.json` (cookies + localStorage). If the session is gone it
-  raises a non-retryable "re-authentication required" error instead of triggering an SMS.
-- An operator restores access from the web UI: **Settings → Банки → Alfa-Bank →
-  «Вход по SMS» → «Войти (запросить SMS)»**. Alfa sends the code, a field appears,
-  the operator enters it and confirms. On success the session is persisted and the
-  scheduler resumes on the saved session — no further SMS until it expires.
-- The same flow is available over the API: `POST /api/auth/alfabank/start` →
-  `POST /api/auth/alfabank/sms` with `{ "code": "1234" }`.
-- Changing Alfa-Bank credentials clears the saved session, forcing a fresh SMS login.
+- Automated `login()` first reuses the session persisted to
+  `<SESSION_DIR>/<bank>.json` (cookies + localStorage) and, if it is gone, **submits
+  the credentials itself** and waits for the cabinet.
+- If the bank actually holds on the SMS prompt (or rejects the credentials), the
+  login fails with "re-authentication required". For Alfa-Bank further automatic
+  attempts are then **blocked for 6 hours**, so a scheduler tick never fires an SMS
+  (or a bad-password attempt) every cycle.
+- An operator restores access from the web UI: **Settings → Банки → <bank> →
+  «Вход по SMS» → «Войти (запросить SMS)»**. The bank sends the code, a field appears,
+  the operator enters it and confirms. On success the session is persisted (and the
+  block lifted); the scheduler skips the bank while the SMS step is pending.
+- The same flow is available over the API: `POST /api/auth/<bank>/start` →
+  `POST /api/auth/<bank>/sms` with `{ "code": "1234" }`.
+- Changing a bank's credentials clears its saved session (and lifts the block).
 
 Session files live under `SESSION_DIR` (default `./data/sessions`). If the SMS flow
 stalls, enable `DEBUG_SCREENSHOTS=true` and inspect `./data/debug/alfabank-sms-*` — the
@@ -115,8 +128,9 @@ A bank is **enabled** when its `LOGIN` env var (or the corresponding setting sav
 | `BASE_PATH` | — | Sub-path prefix when served behind a reverse proxy (e.g. `/ibank`); leave empty when the app is at the root |
 | `API_KEY` | — | Secret key to protect the API |
 | `APP_TIMEZONE` | `Europe/Minsk` | IANA timezone used for scheduling, today-totals calculations, and browser locale |
-| `SCHEDULE_START_HOUR` | `9` | Scraping window start hour (APP_TIMEZONE) |
-| `SCHEDULE_END_HOUR` | `17` | Scraping window end hour (APP_TIMEZONE) |
+| `SCHEDULE_START_HOUR` | `9` | Scraping window start hour for corporate banks (APP_TIMEZONE); iParitet is polled 24/7 |
+| `SCHEDULE_END_HOUR` | `17` | Scraping window end hour for corporate banks (APP_TIMEZONE) |
+| `<BANK>_SCHEDULE_END_HOUR` | — | Per-bank override of the end hour, e.g. `BELVEB_SCHEDULE_END_HOUR=20` so operations posted after 17:00 reach the cache before 1C's evening import |
 | `SCHEDULE_INTERVAL_MINUTES` | `5` | Interval between scrapes (minutes) |
 | `EXTRA_WORKING_DAYS` | — | Comma-separated dates (`YYYY-MM-DD`) that are working days despite falling on Sat/Sun (e.g. `2026-04-25,2026-11-07`) |
 | `ALFABANK_STATEMENT_ACCOUNTS` | — | Comma-separated account numbers for automatic statement sync |
@@ -153,6 +167,7 @@ All endpoints (except `/health`) require authentication via one of:
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
+| GET | `/api/payment-orders/last?bank=priorbank[&account=BY...]` | Last outgoing payment order number, live from the bank |
 | GET | `/api/today-totals` | Today's credit/debit totals per account (grouped by bank, account, currency) |
 | GET | `/api/statement-accounts` | Accounts currently configured for statement syncing |
 | GET | `/api/settings` | All configurable settings (sensitive values masked as `***`) |
@@ -205,7 +220,7 @@ All endpoints (except `/health`) require authentication via one of:
       "counterpartyName": "ООО Пример",
       "counterpartyAccount": "BY34PJCB...",
       "operationCode": "17",
-      "txKey": "123456",
+      "txKey": "123456:8bc8eda68edf3f29",
       "importedAt": "2026-05-28T10:05:00.000Z"
     }
   ],
@@ -224,6 +239,27 @@ All endpoints (except `/health`) require authentication via one of:
 }
 ```
 
+### Example: GET /api/payment-orders/last?bank=priorbank
+
+Read live from the bank on every call (Priorbank only for now). `lastNumber` is the
+**highest** number among this year's newest ruble payment orders, all statuses
+included; `account=BY...` narrows it to one payer account. `null` when none found.
+
+```json
+{
+  "bank": "priorbank",
+  "account": null,
+  "lastNumber": "2076",
+  "document": {
+    "number": "2076", "date": "2026-11-18", "status": "Проведен банком",
+    "amount": 328.2, "currency": "BYN", "payerAccount": "BY27PJCB...",
+    "recipientName": "...", "recipientAccount": "BY76ALFA...", "purpose": "..."
+  },
+  "examined": 100,
+  "checkedAt": "2026-11-18T07:26:11.000Z"
+}
+```
+
 ## Architecture
 
 ```
@@ -239,16 +275,23 @@ Scheduler (node-cron)
                           └─► notify/onec.ts — POST to 1C webhook on new imports
 ```
 
-Configuration is read from `config/store.ts` (DB-backed key-value cache, falls back to `process.env`). All runtime settings except `DB_PATH` and `API_PORT` can be updated via `POST /api/settings` without restarting the process.
+A single cron task (`scheduler/index.ts`) fires every `SCHEDULE_INTERVAL_MINUTES` and picks the banks to sync on that tick: corporate banks only inside their working window, retail banks (`roundTheClock`, iParitet) always. Syncs never overlap — one shared Chromium, one isolated browser context per bank (`scraper/browser.ts`).
+
+Configuration is read from `config/store.ts` (DB-backed key-value cache, falls back to `process.env`). All runtime settings except `DB_PATH`, `API_PORT`, `BASE_PATH` and `SESSION_DIR` can be updated via `POST /api/settings` without restarting the process.
 
 Each bank adapter uses the strategy best suited to that bank's web application:
 
-- **Alfa-Bank, Priorbank** — XHR/fetch response interception, with DOM scraping as fallback. Alfa-Bank additionally reuses a persisted browser session (see [Interactive SMS login](#interactive-sms-login-alfa-bank)) instead of logging in each cycle.
-- **БелВЭБ** — direct AJAX portlet fetch, with Kendo Grid DOM scraping as fallback
-- **Паритетбанк (corporate)** — direct REST API calls via `page.evaluate(fetch(...))` using the session established by Playwright login; no DOM scraping required
-- **iParitet (Паритетбанк физлица)** — Angular SPA with a bearer-token JSON API. Automated login reuses the persisted session and otherwise signs in with login/password (no SMS on a normal sign-in); if the bank issues a new-device SMS challenge, an operator completes it once via the settings UI. Scraping reads the token from `localStorage` and calls the JSON API directly
+- **Alfa-Bank** — XHR/fetch response interception, with DOM scraping as fallback; reuses a persisted browser session (see [Interactive SMS login](#interactive-sms-login-alfa-bank-iparitet)).
+- **Priorbank** — runs two cabinets on one session: balances are intercepted from the old Kendo cabinet (`/v1/`), statements come from the new cabinet's JSON API (`/v2/Accounts/GetStatementData`). The last payment order number is read from the old cabinet's document portlet over the context's HTTP client, without navigating the page a sync may be using.
+- **БелВЭБ** — direct AJAX portlet fetch, with Kendo Grid DOM scraping as fallback. The «за период» statement omits the current day, so today's operations are fetched separately («сегодня») and merged.
+- **Паритетбанк (corporate)** — signs in directly on `new.eparitet.by` and calls its REST API via `page.evaluate(fetch(...))`; stale keep-alive connections are dropped before each cycle (`paritetbank/connection.ts`).
+- **iParitet (Паритетбанк физлица)** — Angular SPA with a bearer-token JSON API. The token is sniffed from the SPA's own `Authorization` header (falling back to sessionStorage) and the JSON API is called directly. Only operations the bank has posted are stored, not authorisation holds.
 
 Statement scraping stores transactions in the `transactions` table. After each successful import, if new transactions were found, a `POST` notification is sent to the configured 1C webhook.
+
+### Transaction deduplication
+
+Every statement sync re-reads at least the last 7 days, so rows are inserted with `INSERT … ON CONFLICT DO NOTHING` against the unique index `(bank, account_number, transaction_date, tx_key)`. The document number alone is not an identity (a bank can issue two payments with the same number), so `tx_key` (`src/utils/txkey.ts`) hashes the number together with the amounts, counterparty account and payment purpose, keeping the number as a readable prefix (`123456:8bc8eda68edf3f29`). Changing the formula requires bumping `TX_KEY_VERSION`; stored keys are then recomputed on startup.
 
 ## Development
 
@@ -269,12 +312,21 @@ Set `DEBUG_SCREENSHOTS=true` via `.env` or the Settings panel, trigger a sync, t
 | Bank | Balance debug files | Statement debug files |
 |---|---|---|
 | Alfa-Bank | `alfabank-dashboard.html` / `.png` | `alfabank-statement-<account>.html` / `.png` |
-| Priorbank | `priorbank-dashboard.html` / `.png` | `priorbank-statement-<account>.html` / `.png` |
+| Priorbank | `priorbank-dashboard.html` / `.png` | `priorbank-stmt-<account>-response.json` |
 | БелВЭБ | `belveb-dashboard.html` / `.png` | `belveb-stmt-<account>-<step>.html` / `.png` |
 | Паритетбанк | `paritetbank-accounts-response.json` | `paritetbank-stmt-<account>-response.json` |
 | iParitet | `iparitet-accounts-response.json` | `iparitet-stmt-<account>-response.json` |
 
 Update the relevant `src/banks/<bank>/accounts.ts` or `statements.ts` based on what the debug files reveal.
+
+For investigating a cabinet (menu, forms, XHR responses) there are read-only recon scripts; they log in with the same credentials as the service:
+
+```bash
+npx tsx src/tools/belveb-recon.ts BY00BELV...            # → ./data/debug/belveb-recon/
+RECON_IDS=2833,1141 npx tsx src/tools/priorbank-recon.ts  # → ./data/debug/priorbank-recon/
+```
+
+A separate login may knock out the running service's session (it re-logs in on the next cycle). Delete the output directories afterwards — they contain account data.
 
 ## 1C notifications
 
