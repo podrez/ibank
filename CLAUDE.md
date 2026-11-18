@@ -102,6 +102,7 @@ the lookback window would re-insert recent rows under their new keys.
 | GET | `/api/statements?bank=alfabank&account=BY12...&from=2025-01-01&to=2025-01-31&limit=500` | Filtered transactions |
 | POST | `/api/statements/refresh` | Trigger statement download for all configured accounts |
 | POST | `/api/statements/refresh` (body: `{bank, account, dateFrom?, dateTo?}`) | Trigger for a specific account |
+| GET | `/api/payment-orders/last?bank=priorbank[&account=BY...]` | Last outgoing payment order number, read live from the bank (Priorbank only) |
 | GET | `/api/auth` | Banks supporting interactive (SMS) login, with stage + saved-session flag |
 | GET | `/api/auth/<bank>/status` | Interactive-login stage (`idle`/`awaiting_sms`) and whether a session is saved |
 | POST | `/api/auth/<bank>/start` | Begin operator-driven login (fills creds, triggers SMS) |
@@ -277,6 +278,21 @@ page so the session cookie is attached, no DOM scraping:
 - The range limit is `GET /v2/Accounts/GetMaxStatementRangeInDays` (186 days).
 - A dead session answers `200` with an HTML login page; `apiCall` raises
   "Session expired" on that so the caller re-logs in instead of storing zero rows.
+
+**Last payment order number** (`src/banks/priorbank/payments.ts`, `GET /api/payment-orders/last`).
+Payment documents are **not** in `/v2/` — the new cabinet's «Мои документы» (`/Cabinet/2833`)
+and «9 - Рублевая платежка» (`/Cabinet/1141`) embed old Kendo portlets:
+`GET /v1/Bia.Portlets.Ib.Prior.Documents.Document9/Documents9/Index?prtlId=prtl0…` (HTML with
+`__RequestVerificationToken`, also sets its cookie) → `POST …/Documents9/List` (form-urlencoded:
+`QueryTypeId=9`, `Period=AllTime`, `PageSize`, `Sorting=QueryId-desc`, …) → `{Items[], TotalCount}`,
+each with `DocumentNumber` (string), `DateTimeIn`, `LastStatusText`, `Amount`, `AccountNumber`,
+`Recipient*`, `QueryId`. `…/DocumentAll/List` is the same for all document types.
+It runs over `page.context().request` (shares the cookies, **no navigation**), so it can't
+disturb a sync driving the page. The answer is the **max** number among this year's newest
+100 documents, not the newest one's: the salary project files its own type-9 orders into the
+same sequence and 1C's import can repeat a number (18.11.2026: salary order 2075, then 1C's 2075).
+All statuses count. `src/tools/priorbank-recon.ts` dumps the menu and every XHR of chosen
+`/Cabinet/<id>` pages (`RECON_IDS=2833,1141`) — delete `data/debug/priorbank-recon` afterwards.
 
 Other useful `/v2/` endpoints seen in the new cabinet: `User/CheckSessionAlive`,
 `User/GetUserMenu`, `Accounts/GetAccountList` (balances, if the old cabinet ever dies).

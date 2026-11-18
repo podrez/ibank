@@ -107,6 +107,20 @@ function currentHour(): number {
 }
 
 /**
+ * Resolves once no scheduled/manual sync is running, or after `timeoutMs`.
+ * Lets an on-demand request that has to log in avoid racing the sync's own
+ * login (adapter.login() closes the page the sync is driving).
+ */
+export async function waitForSyncIdle(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (isSyncing) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+  return true;
+}
+
+/**
  * Run sync for all enabled banks, or a specific bank if bankId is provided.
  * Used by the /api/refresh endpoint — a manual refresh ignores the schedule
  * window and syncs whatever was requested.

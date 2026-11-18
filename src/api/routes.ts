@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db, schema } from '../db';
 import { desc, eq, and, gte, lte, sql, count } from 'drizzle-orm';
-import { runSync, stopScheduler, startScheduler } from '../scheduler';
+import { runSync, stopScheduler, startScheduler, waitForSyncIdle } from '../scheduler';
 import { getEnabledBanks, resetEnabledBanks } from '../banks';
 import { syncBankStatement, syncAllStatements } from '../scraper';
 import { logger } from '../logger';
@@ -179,6 +179,40 @@ router.post('/statements/refresh', async (req, res) => {
     syncAllStatements(dateFrom, dateTo)
       .catch((err) => logger.error('Statement refresh error', { error: err.message }));
     res.json({ message: 'Statement refresh started for all configured accounts' });
+  }
+});
+
+/**
+ * GET /api/payment-orders/last?bank=priorbank[&account=BY...]
+ * Number of the last outgoing payment order, read live from the bank (not cached).
+ * `bank` defaults to the only enabled bank that supports it.
+ */
+router.get('/payment-orders/last', async (req, res) => {
+  const bankId = req.query['bank'] as string | undefined;
+  const account = (req.query['account'] as string | undefined)?.trim() || undefined;
+
+  const supporting = getEnabledBanks().filter((b) => b.getLastPaymentOrder);
+  const bank = bankId ? supporting.find((b) => b.id === bankId) : supporting.length === 1 ? supporting[0] : undefined;
+  if (!bank) {
+    res.status(bankId ? 404 : 400).json({
+      error: bankId
+        ? `Bank "${bankId}" not enabled or does not support payment orders`
+        : 'Specify ?bank=',
+      supported: supporting.map((b) => b.id),
+    });
+    return;
+  }
+
+  try {
+    // A login now would close the page a running sync is driving — let it finish.
+    if (!(await bank.isLoggedIn())) await waitForSyncIdle(180_000);
+
+    const result = await bank.getLastPaymentOrder!({ account });
+    res.json({ bank: bank.id, account: account ?? null, ...result, checkedAt: new Date().toISOString() });
+  } catch (err) {
+    const message = (err as Error).message;
+    logger.error('GET /payment-orders/last error', { bank: bank.id, error: message });
+    res.status(502).json({ error: message, bank: bank.id });
   }
 });
 
